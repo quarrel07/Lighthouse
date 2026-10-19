@@ -79,6 +79,15 @@ fi"
 # ---------------------------------------------------------------------------
 # Relink dylibs into Contents/Frameworks (portable .app) + SDL3, then codesign
 # ---------------------------------------------------------------------------
+# SDL3 to bundle next to the sdl2-compat shim: prefer the CMAKE_PREFIX_PATH dependency set (e.g. libraries
+# built for an older macOS), then fall back to Homebrew.
+execute_process(COMMAND brew --prefix sdl3 OUTPUT_VARIABLE LIGHTHOUSE_BREW_SDL3 OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+find_library(LIGHTHOUSE_SDL3_DYLIB NAMES SDL3.0 SDL3 PATHS ${CMAKE_PREFIX_PATH} PATH_SUFFIXES lib NO_DEFAULT_PATH)
+if (NOT LIGHTHOUSE_SDL3_DYLIB AND LIGHTHOUSE_BREW_SDL3)
+    set(LIGHTHOUSE_SDL3_DYLIB "${LIGHTHOUSE_BREW_SDL3}/lib/libSDL3.0.dylib")
+endif()
+message(STATUS "Bundling SDL3 from: ${LIGHTHOUSE_SDL3_DYLIB}")
+
 if (LIGHTHOUSE_BUNDLE_DEPS)
     add_custom_command(TARGET Lighthouse POST_BUILD
         COMMAND ${CMAKE_COMMAND}
@@ -88,7 +97,7 @@ if (LIGHTHOUSE_BUNDLE_DEPS)
         COMMAND bash -c "install_name_tool -add_rpath '@executable_path/../Frameworks/' '$<TARGET_BUNDLE_DIR:Lighthouse>/Contents/MacOS/Lighthouse' 2>/dev/null || true"
         # Homebrew's sdl2 is sdl2-compat, a shim that dlopen()s libSDL3.dylib from @loader_path at
         # runtime; fixup_bundle can't follow a dlopen, so copy SDL3 in next to the bundled libSDL2.
-        COMMAND bash -c "SDL3_LIB=$(brew --prefix sdl3 2>/dev/null)/lib/libSDL3.0.dylib; if [ -f \"$SDL3_LIB\" ]; then cp \"$SDL3_LIB\" '$<TARGET_BUNDLE_DIR:Lighthouse>/Contents/Frameworks/libSDL3.dylib' && chmod u+w '$<TARGET_BUNDLE_DIR:Lighthouse>/Contents/Frameworks/libSDL3.dylib'; fi"
+        COMMAND bash -c "if [ -f '${LIGHTHOUSE_SDL3_DYLIB}' ]; then cp '${LIGHTHOUSE_SDL3_DYLIB}' '$<TARGET_BUNDLE_DIR:Lighthouse>/Contents/Frameworks/libSDL3.dylib' && chmod u+w '$<TARGET_BUNDLE_DIR:Lighthouse>/Contents/Frameworks/libSDL3.dylib'; fi"
         COMMENT "Relinking dylibs into the .app bundle (incl. SDL3 for sdl2-compat)"
         VERBATIM
     )
