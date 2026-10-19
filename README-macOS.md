@@ -45,6 +45,8 @@ No copyrighted assets are bundled. You must supply your own legally-dumped ROM.
 | 8 | **Live ImGui menu scaling** `src/port/UI/LighthouseMenuSettings.cpp` | The "ImGui Menu Scaling" option now takes effect immediately instead of on the next launch, by wiring up its apply callback (the same wiring 2 Ship 2 Harkinian ships). |
 | 9 | **ROM archive regeneration on macOS** `src/port/Extractor/ExtractFlow.cpp` | The "Outdated ROM Archives" re-extract flow resolved the old archive's path relative to the working directory, which on macOS differs from the data folder, so the regeneration couldn't start. The path is now resolved through the same lookup that located the archive. |
 | 10 | **Native ROM picker** `src/port/FilePickerMac.mm` | The ROM file dialog on macOS is now the app's own `NSOpenPanel`, shown asynchronously: the game keeps rendering, fullscreen stays put, and the panel presents above it like any native app's open dialog. (The previous external-process dialog could end up behind a fullscreen window.) |
+| 11 | **Retina viewport** (`libultraship`) | On Retina displays the Metal window size was recorded in pixels at startup, so **Viewport dimensions** read double the real size, and the internal render size came out at half the true pixels, so 100% internal resolution looked soft and native needed 200%. The window size is now point-based like the rest of the window code, and the render size is scaled by the display backing scale, so **100% internal resolution means native pixels**. |
+| 12 | **HDR upscaling** (`libultraship`, Settings → Graphics) | Opt-in **16-bit Color + HDR Output** draws the game and the window in 16-bit color instead of 8-bit, which smooths banding in dark scenes, fog and sky, and turns on macOS extended dynamic range (EDR). **Auto HDR** then converts the game's standard picture to HDR: darker colors stay as they are and the brightest ones glow brighter than normal white, up to what the display can show at that moment. Both are off by default and apply instantly. Auto HDR follows Filippo Tarpini's [PumboAutoHDR](https://github.com/Filoppi/PumboAutoHDR) and his AutoHDR shader for [Dolphin](https://github.com/dolphin-emu/dolphin). |
 
 One fix the other quarrel07 port forks carry is **not needed here** — upstream Lighthouse already
 sets the writable data folder via `LSEnvironment SHIP_HOME`.
@@ -77,7 +79,7 @@ the dylib/SDL3 bundling for a local-only build that uses your Homebrew libraries
 
 | Submodule | Fork / branch | Change |
 |-----------|---------------|--------|
-| `libultraship` | [`quarrel07/libultraship@lighthouse-libus`](https://github.com/quarrel07/libultraship/tree/lighthouse-libus) | SDL2 framework build fix (#1) + HiDPI font density (#2) |
+| `libultraship` | [`quarrel07/libultraship@lighthouse-libus`](https://github.com/quarrel07/libultraship/tree/lighthouse-libus) | SDL2 framework build fix (#1) + HiDPI font density (#2) + Retina viewport (#11) + HDR (#12) |
 
 The fork branches from the exact commit upstream Lighthouse pins, so this fork tracks upstream with
 only the macOS-specific deltas above. `Torch` is unchanged and still points at upstream.
@@ -87,3 +89,5 @@ only the macOS-specific deltas above. `Torch` is unchanged and still points at u
 All credit for Lighthouse goes to the **[HarbourMasters](https://github.com/HarbourMasters)** team and
 contributors, and to **[Kenix3](https://github.com/Kenix3)** / the libultraship project. This fork
 only adds macOS build, packaging, and quality-of-life fixes.
+
+Auto HDR is based on **[Filippo Tarpini (Filoppi)](https://github.com/Filoppi)**'s [PumboAutoHDR](https://github.com/Filoppi/PumboAutoHDR) and the AutoHDR shader he wrote for the [Dolphin](https://github.com/dolphin-emu/dolphin) emulator.
