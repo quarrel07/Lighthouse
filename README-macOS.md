@@ -22,7 +22,7 @@ upstream — you still provide your own *Banjo-Kazooie* ROM.
 ## Download & run
 
 1. Grab the latest `Lighthouse-vX.Y.Z-macOS-arm64.zip` from
-   [Releases](https://github.com/quarrel07/Lighthouse-macOS/releases) and unzip it.
+   [Releases](https://github.com/quarrel07/Lighthouse/releases) and unzip it.
 2. The app is **ad-hoc codesigned**, so on first launch right-click `Lighthouse.app` → **Open**
    (or run `xattr -dr com.apple.quarantine Lighthouse.app`) to get past Gatekeeper.
 3. On first run the game asks for a supported **Banjo-Kazooie ROM** (`.z64` — US 1.0/1.1, JP, or PAL).
@@ -63,7 +63,7 @@ sets the writable data folder via `LSEnvironment SHIP_HOME`.
 
 ```bash
 brew install cmake ninja sdl2 sdl3 sdl2_net libpng glew libzip nlohmann-json tinyxml2 spdlog libogg libvorbis boost
-git clone --recurse-submodules https://github.com/quarrel07/Lighthouse-macOS.git
+git clone --recurse-submodules https://github.com/quarrel07/Lighthouse.git
 cd Lighthouse-macOS
 cmake --no-warn-unused-cli -H. -Bbuild-cmake -GNinja -DCMAKE_BUILD_TYPE=Release
 cmake --build build-cmake --target Lighthouse   # produces build-cmake/Lighthouse.app

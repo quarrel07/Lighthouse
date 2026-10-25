@@ -7,7 +7,7 @@
 > `Lighthouse.app`** from a plain build, with **crisp Retina/HiDPI menu text**, a **fix for the
 > press-and-hold accent popup** while moving, a native **Liquid Glass app icon**, a correctly
 > versioned bundle, and the build fixes needed for a current Apple-clang / CMake toolchain.
-> **→ [Download the prebuilt macOS app](https://github.com/quarrel07/Lighthouse-macOS/releases/latest)** (Apple Silicon), or see
+> **→ [Download the prebuilt macOS app](https://github.com/quarrel07/Lighthouse/releases/latest)** (Apple Silicon), or see
 > **[README-macOS.md](README-macOS.md)** for what's different and how to build it yourself.
 > Releases track upstream's version (`vX.Y.Z-macos` = the macOS build of upstream `vX.Y.Z`).
 > Everything below is from the upstream project. As with upstream, **no game assets are included** —
