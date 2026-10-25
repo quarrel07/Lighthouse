@@ -19,15 +19,11 @@ upstream — you still provide your own *Banjo-Kazooie* ROM.
 
 ---
 
-## Download & run
+## Getting the game
 
-1. Grab the latest `Lighthouse-vX.Y.Z-macOS-arm64.zip` from
-   [Releases](https://github.com/quarrel07/Lighthouse/releases) and unzip it.
-2. The app is **ad-hoc codesigned**, so on first launch right-click `Lighthouse.app` → **Open**
-   (or run `xattr -dr com.apple.quarantine Lighthouse.app`) to get past Gatekeeper.
-3. On first run the game asks for a supported **Banjo-Kazooie ROM** (`.z64` — US 1.0/1.1, JP, or PAL).
-   It extracts `bk.o2r` into `~/Library/Application Support/com.lighthouse/` — this can take a
-   minute — then boots straight to the game.
+No builds are published from this fork. The official game is at the [upstream releases](https://github.com/HarbourMasters/Lighthouse/releases). To run the fork's branch, build it as below.
+
+On first run the game asks for a supported **Banjo-Kazooie ROM** (`.z64`: US 1.0/1.1, JP, or PAL). It extracts `bk.o2r` into `~/Library/Application Support/com.lighthouse/`, which can take a minute, then boots straight to the game.
 
 No copyrighted assets are bundled. You must supply your own legally-dumped ROM.
 
