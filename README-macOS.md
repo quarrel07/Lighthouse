@@ -8,20 +8,15 @@
 
 # Lighthouse — macOS
 
-A macOS-optimized fork of [HarbourMasters/Lighthouse](https://github.com/HarbourMasters/Lighthouse)
-(the *Banjo-Kazooie* PC port, built on [libultraship](https://github.com/Kenix3/libultraship)).
+A macOS fork of [HarbourMasters/Lighthouse](https://github.com/HarbourMasters/Lighthouse) (the *Banjo-Kazooie* PC port, built on [libultraship](https://github.com/Kenix3/libultraship)).
 
-The goal of this fork is simple: **a plain build produces a self-contained, codesigned
-`Lighthouse.app`** that launches on any modern Apple-Silicon Mac with no extra setup — plus crisp
-Retina text, a native Liquid Glass icon, an input fix, and the build fixes needed for a current
-Apple-clang / CMake toolchain. Gameplay, assets, and the rest of the project are unchanged from
-upstream — you still provide your own *Banjo-Kazooie* ROM.
+It adds HDR upscaling, crisp Retina menu text, a Retina viewport fix, a native ROM picker, a press-and-hold input fix and a Liquid Glass app icon, and the regular build produces the finished `.app`. Gameplay, assets, and the rest of the project are unchanged from upstream; you still provide your own *Banjo-Kazooie* ROM.
 
 ---
 
 ## Getting the game
 
-No builds are published from this fork. The official game is at the [upstream releases](https://github.com/HarbourMasters/Lighthouse/releases). To run the fork's branch, build it as below.
+No builds are published from this fork. The official game, including its Mac version, is at the [upstream releases](https://github.com/HarbourMasters/Lighthouse/releases). To run the fork's branch, build it as below.
 
 On first run the game asks for a supported **Banjo-Kazooie ROM** (`.z64`: US 1.0/1.1, JP, or PAL). It extracts `bk.o2r` into `~/Library/Application Support/com.lighthouse/`, which can take a minute, then boots straight to the game.
 
@@ -34,10 +29,10 @@ No copyrighted assets are bundled. You must supply your own legally-dumped ROM.
 | 1 | **libultraship** `cmake/dependencies/mac.cmake` | A stale `/Library/Frameworks/SDL2.framework` can win `find_package(SDL2)` over Homebrew's and break configure. Search frameworks last and add the Homebrew prefix to `CMAKE_PREFIX_PATH`. |
 | 2 | **Crisp Retina menu text** (`libultraship`, `src/port/Engine.cpp`) | The ImGui overlay was rasterized at logical point size and stretched to the Retina framebuffer → fuzzy menus. Detect the display backing scale (`Gui::GetDpiScale`, set in `Fast3dGui::Init`) and rasterize every font (`ImFontConfig::RasterizerDensity`) at that scale. The menu fonts are baked at `backingScale × maxUiScale` so text also stays sharp at every **ImGui scale** option, not just the default. |
 | 3 | **Press-and-hold accent popup** `src/port/Game.cpp` | Holding a movement key (WASD) popped up the macOS accent/diacritic picker, because SDL keeps a Cocoa text-input context active. Disable the per-app `ApplePressAndHoldEnabled` default at startup — key repeat still works, the popup is gone. |
-| 4 | **Packaging** `cmake/macos/apple_bundle.cmake` | Build a self-contained `.app`: set `MACOSX_BUNDLE`, compile the Liquid Glass icon, bundle `lighthouse.o2r` + `config.yml` + the first-run extractor's `assets/` into `Contents/Resources`, relink Homebrew dylibs into `Contents/Frameworks`, and ad-hoc codesign. Homebrew's `sdl2` is now **sdl2-compat**, which `dlopen`s SDL3 at runtime — `fixup_bundle` can't see a `dlopen`, so `libSDL3.dylib` is copied in by hand (otherwise the app aborts with *"Failed loading SDL3 library."*). |
+| 4 | **Packaging** `cmake/macos/apple_bundle.cmake` | The regular build produces the finished `.app` (upstream assembles its app in a separate CPack packaging step): set `MACOSX_BUNDLE`, compile the Liquid Glass icon, bundle `lighthouse.o2r` + `config.yml` + the first-run extractor's `assets/` into `Contents/Resources`, relink Homebrew dylibs into `Contents/Frameworks`, and ad-hoc codesign. Homebrew's `sdl2` is now **sdl2-compat**, which `dlopen`s SDL3 at runtime; `fixup_bundle` can't see a `dlopen`, so `libSDL3.dylib` is copied in by hand (otherwise the app aborts with *"Failed loading SDL3 library."*). |
 | 5 | **Liquid Glass app icon** `macosx/lighthouseicon.icon` | A native [Icon Composer](https://developer.apple.com/documentation/Xcode/creating-your-app-icon-using-icon-composer) icon compiled with `actool` into `Assets.car` (+ a flattened `.icns` for older systems), so the Dock/Finder icon uses the real macOS 26+ Liquid Glass material instead of a flat PNG. On toolchains without `.icon` support the build falls back to a flat icns from upstream's `logo.png`. |
 | 6 | **Metadata** `macosx/Info.plist.in` | Upstream's bundle plist plus `CFBundleIconName = lighthouseicon` (for the Liquid Glass icon) and the HiDPI capability keys. |
-| 7 | **Clean quit** `src/port/Engine.cpp` | Declining the first-run ROM prompt (and the other extraction bail-outs) called `exit()`, which runs static destructors: the libultraship `Context` singleton then logs from `~Context()` after spdlog's own statics are gone → **segfault on a clean quit**. The `RunExtract` bail-outs now use `_Exit()`. |
+| 7 | **Clean quit** `src/port/Extractor/ExtractFlow.cpp` | The first-run extraction bail-outs (declining the ROM prompt and similar) quit with `_Exit()` instead of `exit()`, which skips static destructors. On 1.0.3 this port crashed at that point in `~Context()`, after spdlog's own statics were gone. |
 | 8 | **Native ROM picker** `src/port/FilePickerMac.mm` | The ROM file dialog on macOS is now the app's own `NSOpenPanel`, shown asynchronously: the game keeps rendering, fullscreen stays put, and the panel presents above it like any native app's open dialog. (The previous external-process dialog could end up behind a fullscreen window.) |
 | 9 | **Retina viewport** (`libultraship`) | On Retina displays the Metal window size was recorded in pixels at startup, so **Viewport dimensions** read double the real size, and the internal render size came out at half the true pixels, so 100% internal resolution looked soft and native needed 200%. The window size is now point-based like the rest of the window code, and the render size is scaled by the display backing scale, so **100% internal resolution means native pixels**. |
 | 10 | **HDR upscaling** (`libultraship`, Settings → Graphics) | Opt-in **16-bit Color + HDR Output** draws the game and the window in 16-bit color instead of 8-bit, which smooths banding in dark scenes, fog and sky, and turns on macOS extended dynamic range (EDR). **Auto HDR** then converts the game's standard picture to HDR: darker colors stay as they are and the brightest ones glow brighter than normal white, up to what the display can show at that moment. Both are off by default and apply instantly. Auto HDR follows Filippo Tarpini's [PumboAutoHDR](https://github.com/Filoppi/PumboAutoHDR) and his AutoHDR shader for [Dolphin](https://github.com/dolphin-emu/dolphin). |
@@ -58,7 +53,7 @@ sets the writable data folder via `LSEnvironment SHIP_HOME`.
 ```bash
 brew install cmake ninja sdl2 sdl3 sdl2_net libpng glew libzip nlohmann-json tinyxml2 spdlog libogg libvorbis boost
 git clone --recurse-submodules https://github.com/quarrel07/Lighthouse.git
-cd Lighthouse-macOS
+cd Lighthouse
 cmake --no-warn-unused-cli -H. -Bbuild-cmake -GNinja -DCMAKE_BUILD_TYPE=Release
 cmake --build build-cmake --target Lighthouse   # produces build-cmake/Lighthouse.app
 ```
@@ -73,15 +68,14 @@ the dylib/SDL3 bundling for a local-only build that uses your Homebrew libraries
 
 | Submodule | Fork / branch | Change |
 |-----------|---------------|--------|
-| `libultraship` | [`quarrel07/libultraship@lighthouse-libus`](https://github.com/quarrel07/libultraship/tree/lighthouse-libus) | SDL2 framework build fix (#1) + HiDPI font density (#2) + Retina viewport (#11) + HDR (#12) |
+| `libultraship` | [`quarrel07/libultraship@lighthouse-libus`](https://github.com/quarrel07/libultraship/tree/lighthouse-libus) | SDL2 framework build fix (#1) + HiDPI font density (#2) + Retina viewport (#9) + HDR (#10) |
 
-The fork branches from the exact commit upstream Lighthouse pins, so this fork tracks upstream with
-only the macOS-specific deltas above. `Torch` is unchanged and still points at upstream.
+The branch contains the exact libultraship commit upstream Lighthouse pins ([JeodC/libultraship](https://github.com/JeodC/libultraship) `bk-lighthouse`), with only the macOS-specific deltas above merged on top. `Torch` is unchanged and still points at upstream.
 
 ## Credits
 
 All credit for Lighthouse goes to the **[HarbourMasters](https://github.com/HarbourMasters)** team and
 contributors, and to **[Kenix3](https://github.com/Kenix3)** / the libultraship project. This fork
-only adds macOS build, packaging, and quality-of-life fixes.
+only adds the macOS changes listed above.
 
 Auto HDR is based on **[Filippo Tarpini (Filoppi)](https://github.com/Filoppi)**'s [PumboAutoHDR](https://github.com/Filoppi/PumboAutoHDR) and the AutoHDR shader he wrote for the [Dolphin](https://github.com/dolphin-emu/dolphin) emulator.

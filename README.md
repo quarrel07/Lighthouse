@@ -1,13 +1,8 @@
 <!-- ===== macOS fork banner (this fork only) ===== -->
 > ## 🍎 macOS fork
-> This is a macOS-focused fork of Lighthouse that produces a **self-contained, codesigned
-> `Lighthouse.app`** from a plain build, with **crisp Retina/HiDPI menu text**, a **fix for the
-> press-and-hold accent popup** while moving, a native **Liquid Glass app icon**, and the build
-> fixes needed for a current Apple-clang / CMake toolchain.
-> See **[README-macOS.md](README-macOS.md)** for what's different and how to build it. No builds are
-> published from this fork; the official game is at the [upstream releases](https://github.com/HarbourMasters/Lighthouse/releases).
-> Everything below is from the upstream project. As with upstream, **no game assets are included** —
-> you supply your own ROM.
+> This is a macOS fork of Lighthouse that adds **HDR upscaling**, **crisp Retina menu text**, a **Retina viewport fix**, a **native ROM picker**, a **fix for the press-and-hold accent popup** while moving, and a native **Liquid Glass app icon**.
+> See **[README-macOS.md](README-macOS.md)** for what's different and how to build it. No builds are published from this fork; the official game, including its Mac version, is at the [upstream releases](https://github.com/HarbourMasters/Lighthouse/releases).
+> Everything below is from the upstream project. As with upstream, **no game assets are included**; you supply your own ROM.
 
 <p align="center">
   <img src="icons/preview/liquid-glass-macos26.png" width="168" alt="Liquid Glass app icon rendered on macOS 26">
