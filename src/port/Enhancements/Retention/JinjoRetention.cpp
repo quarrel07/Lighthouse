@@ -10,6 +10,7 @@
 #include "port/Enhancements/Events/PortEnhancements.h"
 #include "port/Enhancements/Events/Hooks/Events.h"
 #include "port/Enhancements/Retention/Retention.h"
+#include "port/Save/SaveManager.h"
 #include "port/Rando/Rando.h"
 #include "port/Rando/CustomObject/CustomObject.h"
 
@@ -18,15 +19,12 @@
 #include "prop.h"
 #include "functions.h"
 
-extern "C" int32_t port_jiggySpawn_isRecorded(int32_t jiggyId);
-
 static bool sForcedByAnchor = false;
 #define CVAR_JINJO_RETENTION CVAR_ENHANCEMENT("Gameplay.JinjoRetention")
 #define CVAR_VALUE (CVarGetInteger(CVAR_JINJO_RETENTION, 0) || sForcedByAnchor)
 
 constexpr u8 kAllJinjos = 0x1F; // all five color bits collected
 
-using retention::activeSlot;
 using retention::systemActive;
 
 static bool applyEnabled() {
@@ -34,13 +32,16 @@ static bool applyEnabled() {
 }
 
 extern "C" void port_jinjoRetention_setForced(int32_t forced) {
+    if (sForcedByAnchor == (forced != 0)) {
+        return;
+    }
     sForcedByAnchor = forced != 0;
     ShipInit::Init(CVAR_JINJO_RETENTION);
 }
 
 static JinjoRetentionSaveData* store() {
-    int32_t slot = activeSlot();
-    return slot >= 0 ? &gameFile_saveData[slot].shipSaveData.jinjoRetention : nullptr;
+    ShipSaveData* data = SaveManager_GetActiveShipData();
+    return data != nullptr ? &data->jinjoRetention : nullptr;
 }
 
 extern "C" void port_jinjoRetention_getSizeAndPtr(int32_t* size, uint8_t** addr) {
@@ -58,12 +59,12 @@ static bool levelInRange(int32_t level) {
     return level > 0 && level < JINJO_RETENTION_LEVEL_SLOTS;
 }
 
-static u8 collectedBits(int32_t level) {
+uint8_t collectedBits(int32_t level) {
     JinjoRetentionSaveData* s = store();
     return (s != nullptr && levelInRange(level)) ? s->collected[level] : 0;
 }
 
-static void setCollectedBits(int32_t level, u8 bits) {
+void setCollectedBits(int32_t level, u8 bits) {
     JinjoRetentionSaveData* s = store();
     if (s != nullptr && levelInRange(level)) {
         s->collected[level] = bits;
@@ -87,7 +88,7 @@ static u8 jinjoBitFromMarker(int32_t markerId) {
     }
 }
 
-static u8 jinjoBitFromActor(int32_t actorId) {
+uint8_t jinjoBitFromActor(int32_t actorId) {
     switch (actorId) {
         case ACTOR_60_JINJO_BLUE:
             return 1 << 0;
@@ -181,10 +182,22 @@ static bool retentionActiveForLevel(int32_t level) {
         return false;
     }
     if (collectedBits(level) == kAllJinjos && !jiggyscore_isCollected(jinjoJiggy(level)) &&
-        !jiggyscore_isSpawned(jinjoJiggy(level)) && !port_jiggySpawn_isRecorded(jinjoJiggy(level))) {
+        !jiggyscore_isSpawned(jinjoJiggy(level))) {
         return false;
     }
     return true;
+}
+
+// Unlike the entry seed this also corrects downward: after a sync the bitfield is the team's truth.
+extern "C" void port_jinjoRetention_requestReseed(void) {
+    if (!systemActive() || !applyEnabled()) {
+        return;
+    }
+    const int32_t level = (int32_t)level_get();
+    if (!retentionActiveForLevel(level)) {
+        return;
+    }
+    item_adjustByDiffWithoutHud(ITEM_12_JINJOS, collectedBits(level) - item_getCount(ITEM_12_JINJOS));
 }
 
 void RegisterJinjoRetention_Init() {
@@ -200,8 +213,7 @@ void RegisterJinjoRetention_Init() {
             if (collectedBits(level) != kAllJinjos) {
                 setCollectedBits(level, kAllJinjos);
             }
-        } else if (collectedBits(level) == kAllJinjos && !jiggyscore_isSpawned(jinjoJiggy(level)) &&
-                   !port_jiggySpawn_isRecorded(jinjoJiggy(level))) {
+        } else if (collectedBits(level) == kAllJinjos && !jiggyscore_isSpawned(jinjoJiggy(level))) {
             // Orphaned: all recorded but jiggy neither collected nor spawned.
             setCollectedBits(level, 0);
         }
@@ -255,17 +267,3 @@ void RegisterJinjoRetention_Init() {
 }
 
 static RegisterShipInitFunc initJinjoRetention(RegisterJinjoRetention_Init, { CVAR_JINJO_RETENTION });
-
-static void RegisterRetentionSaving_Init() {
-    // bcopy's scratch-slot save buffer doesn't carry our bits; sync them in.
-    COND_HOOK(OnSaveFileSave, EVENT_PRIORITY_HIGH, true, [](IEvent* event) {
-        OnSaveFileSave* ev = (OnSaveFileSave*)event;
-        SaveData* buf = (SaveData*)ev->saveBuffer;
-        JinjoRetentionSaveData* live = store();
-        if (buf != nullptr && live != nullptr && &buf->shipSaveData.jinjoRetention != live) {
-            buf->shipSaveData.jinjoRetention = *live;
-        }
-    });
-}
-
-static RegisterShipInitFunc initRetentionSaving(RegisterRetentionSaving_Init);

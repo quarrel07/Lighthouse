@@ -1,5 +1,6 @@
 #include "MiscBehavior.h"
 #include <libultraship/bridge/consolevariablebridge.h>
+#include <spdlog/spdlog.h>
 #include "ship/Context.h"
 #include "port/Enhancements/Events/Hooks/Events.h"
 #include "port/UI/Notification.h"
@@ -8,6 +9,17 @@
 
 #include "port/Rando/Logic/Logic.h"
 #include "port/Rando/Spoiler/Spoiler.h"
+
+static bool sSeedGenerationFailed = false;
+
+static void RefuseSeed(const char* message) {
+    sSeedGenerationFailed = true;
+    Notification::Emit({
+        .prefix = "Seed Failure:",
+        .prefixColor = ImVec4(1.0f, 0.2f, 0.2f, 1.0f),
+        .message = message,
+    });
+}
 
 void Rando::MiscBehavior::OnFileLoad() {
     REGISTER_LISTENER(OnGameLoad, EVENT_PRIORITY_NORMAL, [](IEvent* event) {
@@ -29,14 +41,26 @@ void Rando::MiscBehavior::OnFileLoad() {
             return;
         }
 
-        if (CVarGetInteger(CVAR_RANDOMIZER_SETTING("Enable"), 0)) {
+        if (CVarGetInteger(CVAR_RANDOMIZER_SETTING("Enable"), 0) && !port_isRomhack()) {
             Rando::Logic::InitializeSaveData(saveData);
             std::string spoilerPath = CVarGetString(CVAR_RANDOMIZER_SETTING("SpoilerFile"), "");
             if (CVarGetInteger(CVAR_RANDOMIZER_SETTING("UseExistingLog"), 0) && !spoilerPath.empty()) {
                 // std::string spoilerPath = CVarGetString(CVAR_RANDOMIZER_SETTING("SpoilerFile"), "");
-                Rando::Spoiler::GenerateFromSpoiler(Rando::Spoiler::LoadFromFile(spoilerPath.c_str()));
+                bool loaded = false;
+                try {
+                    loaded = Rando::Spoiler::GenerateFromSpoiler(Rando::Spoiler::LoadFromFile(spoilerPath.c_str()));
+                } catch (const std::exception& e) {
+                    SPDLOG_ERROR("Spoiler log {} didn't load: {}", spoilerPath, e.what());
+                }
+                if (!loaded) {
+                    RefuseSeed("couldn't load the spoiler log.");
+                    return;
+                }
             } else {
-                Rando::Logic::GenerateShufflePool(saveData);
+                if (!Rando::Logic::GenerateShufflePool(saveData)) {
+                    RefuseSeed("couldn't place every item. Try again or change settings.");
+                    return;
+                }
                 Rando::Logic::GrantStartingLoadout();
                 Rando::Logic::GrantFileProgressFlags();
                 std::string spoilerName = std::to_string(saveData->shipSaveData.randoSaveData.seedId).c_str();
@@ -47,6 +71,13 @@ void Rando::MiscBehavior::OnFileLoad() {
 
             saveData->shipSaveData.fileType = FILE_TYPE_SAVE_RANDO;
             saveData->shipSaveData.fileCreatedAt = GetUnixTimestamp();
+        }
+    });
+
+    REGISTER_VB_SHOULD(VB_GAMESELECT_START_GAME, EVENT_PRIORITY_NORMAL, {
+        if (sSeedGenerationFailed) {
+            sSeedGenerationFailed = false;
+            *should = false;
         }
     });
 

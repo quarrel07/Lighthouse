@@ -3,6 +3,9 @@
 
 #include "prop.h"
 #include "include/core1/sns.h"
+extern "C" {
+#include "core2/abilityprogress.h"
+}
 
 namespace Rando {
 
@@ -849,10 +852,10 @@ std::map<RandoCheckId, RandoStaticCheck> Checks = {
     RC(RC_MMM_MUMBO_TOKEN_TOP_OF_RAFTER_INSIDE_CHURCH,                          RCTYPE_MUMBO_TOKEN,     LEVEL_A_MAD_MONSTER_MANSION,    ACTOR_2D_MUMBO_TOKEN,       MUMBOTOKEN_3A_MMM_TOP_OF_RAFTER_INSIDE_CHURCH,                          0, 4806, 341),
     RC(RC_MMM_MUMBO_TOKEN_TOP_OF_STOOL_INSIDE_CHURCH,                           RCTYPE_MUMBO_TOKEN,     LEVEL_A_MAD_MONSTER_MANSION,    ACTOR_2D_MUMBO_TOKEN,       MUMBOTOKEN_3B_MMM_TOP_OF_STOOL_INSIDE_CHURCH,                           0, 583, -1300),
     RC(RC_MMM_MUMBO_TOKEN_TOP_OF_TUMBLARS_SHED,                                 RCTYPE_MUMBO_TOKEN,     LEVEL_A_MAD_MONSTER_MANSION,    ACTOR_2D_MUMBO_TOKEN,       MUMBOTOKEN_3C_MMM_TOP_OF_TUMBLARS_SHED,                                 1796, 857, -4243),
-    RC(RC_MMM_NOTE_AROUND_THE_WELL_WEST_2,                                      RCTYPE_MUSIC_NOTE,      LEVEL_A_MAD_MONSTER_MANSION,    ACTOR_51_MUSIC_NOTE,        NULL,                                                                   7150, -275, -3474),
-    RC(RC_MMM_NOTE_AROUND_THE_WELL_WEST_1,                                      RCTYPE_MUSIC_NOTE,      LEVEL_A_MAD_MONSTER_MANSION,    ACTOR_51_MUSIC_NOTE,        NULL,                                                                   7150, -275, -3325),
-    RC(RC_MMM_NOTE_AROUND_THE_WELL_EAST_2,                                      RCTYPE_MUSIC_NOTE,      LEVEL_A_MAD_MONSTER_MANSION,    ACTOR_51_MUSIC_NOTE,        NULL,                                                                   4200, -275, -3325),
-    RC(RC_MMM_NOTE_AROUND_THE_WELL_EAST_1,                                      RCTYPE_MUSIC_NOTE,      LEVEL_A_MAD_MONSTER_MANSION,    ACTOR_51_MUSIC_NOTE,        NULL,                                                                   4201, -275, -3475),
+    RC(RC_MMM_NOTE_AROUND_THE_WELL_WEST_2,                                      RCTYPE_MUSIC_NOTE,      LEVEL_A_MAD_MONSTER_MANSION,    ACTOR_51_MUSIC_NOTE,        NULL,                                                                   4200, -275, -3325),
+    RC(RC_MMM_NOTE_AROUND_THE_WELL_WEST_1,                                      RCTYPE_MUSIC_NOTE,      LEVEL_A_MAD_MONSTER_MANSION,    ACTOR_51_MUSIC_NOTE,        NULL,                                                                   4201, -275, -3475),
+    RC(RC_MMM_NOTE_AROUND_THE_WELL_EAST_2,                                      RCTYPE_MUSIC_NOTE,      LEVEL_A_MAD_MONSTER_MANSION,    ACTOR_51_MUSIC_NOTE,        NULL,                                                                   7150, -275, -3474),
+    RC(RC_MMM_NOTE_AROUND_THE_WELL_EAST_1,                                      RCTYPE_MUSIC_NOTE,      LEVEL_A_MAD_MONSTER_MANSION,    ACTOR_51_MUSIC_NOTE,        NULL,                                                                   7150, -275, -3325),
     RC(RC_MMM_NOTE_BARREL_INTERIOR_5,                                           RCTYPE_MUSIC_NOTE,      LEVEL_A_MAD_MONSTER_MANSION,    ACTOR_51_MUSIC_NOTE,        NULL,                                                                   -266, 0, 152),
     RC(RC_MMM_NOTE_BARREL_INTERIOR_4,                                           RCTYPE_MUSIC_NOTE,      LEVEL_A_MAD_MONSTER_MANSION,    ACTOR_51_MUSIC_NOTE,        NULL,                                                                   -267, 0, -153),
     RC(RC_MMM_NOTE_BARREL_INTERIOR_3,                                           RCTYPE_MUSIC_NOTE,      LEVEL_A_MAD_MONSTER_MANSION,    ACTOR_51_MUSIC_NOTE,        NULL,                                                                   0, 0, -310),
@@ -963,11 +966,11 @@ std::map<RandoCheckId, RandoStaticCheck> Checks = {
     RC(RC_RBB_JIGGY_SNORKEL,                                                    RCTYPE_JIGGY,           LEVEL_9_RUSTY_BUCKET_BAY,       ACTOR_46_JIGGY,             JIGGY_53_RBB_SNORKEL,                                                   0, 0, 0),
     RC(RC_RBB_JIGGY_WAREHOUSE,                                                  RCTYPE_JIGGY,           LEVEL_9_RUSTY_BUCKET_BAY,       ACTOR_46_JIGGY,             JIGGY_52_RBB_WAREHOUSE,                                                 850, 850, -1150),
     RC(RC_RBB_JIGGY_WHISTLE,                                                    RCTYPE_JIGGY,           LEVEL_9_RUSTY_BUCKET_BAY,       ACTOR_46_JIGGY,             JIGGY_54_RBB_WHISTLE,                                                   0, 0, 0),
-    RC(RC_RBB_JINJO_BLUE,                                                       RCTYPE_JINJO,           LEVEL_9_RUSTY_BUCKET_BAY,       ACTOR_60_JINJO_BLUE,        NULL,                                                                   -8738, -1253, 4032),
-    RC(RC_RBB_JINJO_GREEN,                                                      RCTYPE_JINJO,           LEVEL_9_RUSTY_BUCKET_BAY,       ACTOR_62_JINJO_GREEN,       NULL,                                                                   8903, -800, -2894),
-    RC(RC_RBB_JINJO_ORANGE,                                                     RCTYPE_JINJO,           LEVEL_9_RUSTY_BUCKET_BAY,       ACTOR_5F_JINJO_ORANGE,      NULL,                                                                   -193, 0, -979),
+    RC(RC_RBB_JINJO_BLUE,                                                       RCTYPE_JINJO,           LEVEL_9_RUSTY_BUCKET_BAY,       ACTOR_60_JINJO_BLUE,        NULL,                                                                   -193, 0, -979),
+    RC(RC_RBB_JINJO_GREEN,                                                      RCTYPE_JINJO,           LEVEL_9_RUSTY_BUCKET_BAY,       ACTOR_62_JINJO_GREEN,       NULL,                                                                   -8615, -1000, -3555),
+    RC(RC_RBB_JINJO_ORANGE,                                                     RCTYPE_JINJO,           LEVEL_9_RUSTY_BUCKET_BAY,       ACTOR_5F_JINJO_ORANGE,      NULL,                                                                   8903, -800, -2894),
     RC(RC_RBB_JINJO_PINK,                                                       RCTYPE_JINJO,           LEVEL_9_RUSTY_BUCKET_BAY,       ACTOR_61_JINJO_PINK,        NULL,                                                                   7850, -2613, 4026),
-    RC(RC_RBB_JINJO_YELLOW,                                                     RCTYPE_JINJO,           LEVEL_9_RUSTY_BUCKET_BAY,       ACTOR_5E_JINJO_YELLOW,      NULL,                                                                   -8615, -1000, -3555),
+    RC(RC_RBB_JINJO_YELLOW,                                                     RCTYPE_JINJO,           LEVEL_9_RUSTY_BUCKET_BAY,       ACTOR_5E_JINJO_YELLOW,      NULL,                                                                   -8738, -1253, 4032),
     RC(RC_RBB_MUMBO_TOKEN_TOXIC_WASTE_POND,                                     RCTYPE_MUMBO_TOKEN,     LEVEL_9_RUSTY_BUCKET_BAY,       ACTOR_2D_MUMBO_TOKEN,       MUMBOTOKEN_46_RBB_TOXIC_WASTE_POND,                                     -7401, -1000, -3425),
     RC(RC_RBB_MUMBO_TOKEN_ON_LIFE_BOAT,                                         RCTYPE_MUMBO_TOKEN,     LEVEL_9_RUSTY_BUCKET_BAY,       ACTOR_2D_MUMBO_TOKEN,       MUMBOTOKEN_44_RBB_ON_LIFE_BOAT,                                         7053, -985, -1672),
     RC(RC_RBB_MUMBO_TOKEN_SHIPS_PROW,                                           RCTYPE_MUMBO_TOKEN,     LEVEL_9_RUSTY_BUCKET_BAY,       ACTOR_2D_MUMBO_TOKEN,       MUMBOTOKEN_43_RBB_SHIPS_PROW,                                           -6200, 150, 0),

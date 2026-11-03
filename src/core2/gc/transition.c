@@ -3,7 +3,7 @@
 #include "core1/core1.h"
 #include "functions.h"
 #include "variables.h"
-#include "gc/gctransition.h"
+#include "core2/gc/transition.h"
 #include "port/Patches/Patches.h"
 #include "port/Engine.h"
 #include "port/Interpolation/FrameInterpolation.h"
@@ -169,7 +169,8 @@ MapTransitionInfo *_gctranstion_get_map_transition_info(s32 map_indx){
 
 void _gctranstion_changeState(s32 state, TransitionInfo *desc){
     if(s_current_transition.model_ptr != NULL){
-        func_8033BD20((void **)&s_current_transition.model_ptr);
+//      func_8033BD20(&s_current_transition.model_ptr);
+        func_8033BD20((BKModelBin **)&s_current_transition.model_ptr);
     }
 
     if(s_current_transition.anctrl != NULL){
@@ -423,7 +424,10 @@ void gctransition_8030BE3C(void){
 
 void gctransition_8030BE60(void){
     TransitionInfo *tmp_a1;
-    tmp_a1 = _gctranstion_8030B400(_gctranstion_get_map_transition_info(gsworld_getMap())->out_index);
+    s32 out_index = _gctranstion_get_map_transition_info(gsworld_getMap())->out_index;
+    EventSystem_Should(VB_MAP_TRANSITION_OUT_INDEX, true, gsworld_getMap(), GetCurrentMap(), &out_index);
+//  tmp_a1 = _gctranstion_8030B400(_gctranstion_get_map_transition_info(gsworld_getMap())->out_index);
+    tmp_a1 = _gctranstion_8030B400(out_index);
    picturebox_func_8030C180();
    _gctranstion_changeState(tmp_a1->state, tmp_a1);
 }

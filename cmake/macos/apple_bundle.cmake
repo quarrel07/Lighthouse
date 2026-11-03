@@ -17,8 +17,7 @@ set(ENTITLEMENTS_FILE ${MACOS_DIR}/entitlements.plist)
 option(LIGHTHOUSE_BUNDLE_DEPS "Relink and bundle dylibs into the .app so it is portable" ON)
 
 # ---------------------------------------------------------------------------
-# Bundle metadata. The configured plist carries the real project version
-# (upstream's static Info.plist is pinned at 0.1.0).
+# Bundle metadata: upstream's res/Info.plist plus the Liquid Glass icon name and HiDPI keys.
 # ---------------------------------------------------------------------------
 configure_file(${CMAKE_SOURCE_DIR}/macosx/Info.plist.in ${CMAKE_BINARY_DIR}/macosx/Info.plist @ONLY)
 set_target_properties(Lighthouse PROPERTIES
@@ -60,8 +59,8 @@ if [ -d \"$ICON_SRC\" ] && xcrun actool \"$ICON_SRC\" --compile \"$GLASS_TMP\" \
 else \
   rm -rf \"$GLASS_TMP/flat.iconset\"; mkdir -p \"$GLASS_TMP/flat.iconset\"; \
   for s in 16 32 128 256 512; do \
-    sips -z $s $s '${CMAKE_SOURCE_DIR}/logo.png' --out \"$GLASS_TMP/flat.iconset/icon_\${s}x\${s}.png\" >/dev/null; \
-    sips -z $((s*2)) $((s*2)) '${CMAKE_SOURCE_DIR}/logo.png' --out \"$GLASS_TMP/flat.iconset/icon_\${s}x\${s}@2x.png\" >/dev/null; \
+    sips -z $s $s '${CMAKE_SOURCE_DIR}/res/logo.png' --out \"$GLASS_TMP/flat.iconset/icon_\${s}x\${s}.png\" >/dev/null; \
+    sips -z $((s*2)) $((s*2)) '${CMAKE_SOURCE_DIR}/res/logo.png' --out \"$GLASS_TMP/flat.iconset/icon_\${s}x\${s}@2x.png\" >/dev/null; \
   done; \
   iconutil -c icns -o '${RES_DIR}/lighthouseicon.icns' \"$GLASS_TMP/flat.iconset\"; \
   echo 'App icon: flat icns from logo.png (no .icon package or actool lacks .icon support)'; \

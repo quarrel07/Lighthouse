@@ -58,7 +58,8 @@ char *dialogBin_get(enum asset_e text_id) {
     //get text_bin from asset cache
     s_dialogBin.ptr = assetcache_get(text_id);
     sp1C = (u8 *)s_dialogBin.ptr + 1;
-    sp1C += code94620_func_8031B5B0()*2;
+//  sp1C += code94620_func_8031B5B0()*2;
+    sp1C += ResourceMgr_GetDialogSlot(text_id, code94620_func_8031B5B0())*2;
     var_a0 = *(sp1C++);
     var_a0 += *(sp1C++)<< 8;
     if(sp1C);
@@ -72,4 +73,18 @@ void dialogBin_release(s32 arg0){
     assetcache_release(s_dialogBin.ptr);
     s_dialogBin.ptr = NULL;
     s_dialogBin.index = -1;
+}
+
+// [port] JP only font swaps
+void func_8031BB10(char *str) {
+    u8 *c;
+
+    for (c = (u8 *)str; *c != '\0'; c++) {
+        if (*c >= '0' && *c <= '9') {
+            *c -= 0x20;
+        }
+        if (*c == ':') {
+            *c = '>';
+        }
+    }
 }

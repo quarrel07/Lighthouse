@@ -27,8 +27,7 @@ typedef struct struct_1A_s {
 } struct1As;
 
 extern void gameSelect_saveAndExit(void);
-extern void func_802E412C(s32, s32);
-void volatileFlag_set(enum volatile_flags_e, s32);
+extern void game_setMapTransitionWithStyle(s32, s32);
 f32 viewport_transformCoordinate(f32, f32, f32 *, f32 *);
 void func_80310D2C(void);
 
@@ -37,7 +36,6 @@ s32 getGameMode(void);
 void func_802DC5B8(void);
 void func_802DC560(NodeProp*, ActorMarker*);
 s32 controller_getStartButton(s32 controller_index);
-bool fileProgressFlag_get(enum file_progress_e);
 enum map_e gsworld_getMap(void);
 bool func_802FD2D4(void);
 bool func_802FC3C4(void);
@@ -95,10 +93,10 @@ enum gcpausemenu_menu_e {
 struct1As D_8036C4E0[4] = {
     // [port] The pause menu strings here match the ones used in Localization.cpp
     // as lookup keys. If modified here, also modify there to keep localization working.
-    {0.0f, 0.0f, "RETURN TO GAME",         55, ZOOMBOX_SPRITE_4_BANJO_1, 0},
-    {0.3f, 0.0f, "EXIT TO WITCH'S LAIR", -100, ZOOMBOX_SPRITE_5_GRUNTILDA_2, 0},
-    {0.1f, 0.0f, "VIEW TOTALS",            90, ZOOMBOX_SPRITE_6_JIGGY_1, 0},
-    {0.2f, 0.0f, "SAVE AND QUIT",         125, ZOOMBOX_SPRITE_7_TOOTY_1, 0},
+    {0.0f, 0.0f, "RETURN TO GAME",         55, ZOOMBOX_SPRITE_4_BANJO_PAUSE, 0},
+    {0.3f, 0.0f, "EXIT TO WITCH'S LAIR", -100, ZOOMBOX_SPRITE_5_GRUNTILDA_PAUSE, 0},
+    {0.1f, 0.0f, "VIEW TOTALS",            90, ZOOMBOX_SPRITE_6_JIGGY_PAUSE, 0},
+    {0.2f, 0.0f, "SAVE AND QUIT",         125, ZOOMBOX_SPRITE_7_TOOTY_PAUSE, 0},
 };
 
 // String literals are read-only on modern compilers; use mutable char arrays instead.
@@ -108,9 +106,9 @@ static u8 D_8036C520_str2[32] = "cc999 / 999cc";
 static u8 D_8036C520_str3[32] = "cc999 : 999cc";
 
 struct1As D_8036C520[4] = {
-    {0.0f, 0.0f, D_8036C520_str0,  30, ZOOMBOX_SPRITE_8_MUSIC_NOTE_1,     0},
-    {0.1f, 0.0f, D_8036C520_str1,  66, ZOOMBOX_SPRITE_9_JIGGY_2,          0},
-    {0.2f, 0.0f, D_8036C520_str2, 102, ZOOMBOX_SPRITE_A_EXTRA_HEALTH_MAX, 0},
+    {0.0f, 0.0f, D_8036C520_str0,  30, ZOOMBOX_SPRITE_8_MUSIC_NOTE_TOTALS, 0},
+    {0.1f, 0.0f, D_8036C520_str1,  66, ZOOMBOX_SPRITE_9_JIGGY_TOTALS,     0},
+    {0.2f, 0.0f, D_8036C520_str2, 102, ZOOMBOX_SPRITE_A_EMPTY_HONEYCOMB, 0},
     {0.3f, 0.0f, D_8036C520_str3, 138, ZOOMBOX_SPRITE_B_CLOCK,            0},
 };
 
@@ -336,21 +334,21 @@ char *gcpausemenu_TimeToA(int time) {
     s32 minutes;
     s32 seconds;
 
-    strcpy(D_80383088, "");
-    strIToA(D_80383088, time / 3600);
-    strcat(D_80383088, ":");
+    bk_strcpy(D_80383088, "");
+    bk_strIToA(D_80383088, time / 3600);
+    bk_strcat(D_80383088, ":");
     minutes = (time / 60) % 60;
     if (minutes < 10) {
-        strcat(D_80383088, "0");
+        bk_strcat(D_80383088, "0");
     }
-    strIToA(D_80383088, minutes);
-    strcat(D_80383088, ":");
+    bk_strIToA(D_80383088, minutes);
+    bk_strcat(D_80383088, ":");
     seconds = time % 60;
     if (seconds < 10) {
-        strcat(D_80383088, "0");
+        bk_strcat(D_80383088, "0");
     }
-    strIToA(D_80383088, seconds);
-    strcat(D_80383088, "");
+    bk_strIToA(D_80383088, seconds);
+    bk_strcat(D_80383088, "");
     return D_80383088;
 }
 
@@ -361,31 +359,31 @@ void gcpausemenu_printLevelTotals(enum level_e level) {
 
     //note ratio 2 string
     gcpausemenu_getLevelNoteScore(level, &val, &max);
-    strcpy(D_8036C520[0].str, empty);
-    strIToA(D_8036C520[0].str, val);
-    strcat(D_8036C520[0].str, "/");
-    strIToA(D_8036C520[0].str, max);
-    strcat(D_8036C520[0].str, empty);
+    bk_strcpy(D_8036C520[0].str, empty);
+    bk_strIToA(D_8036C520[0].str, val);
+    bk_strcat(D_8036C520[0].str, "/");
+    bk_strIToA(D_8036C520[0].str, max);
+    bk_strcat(D_8036C520[0].str, empty);
 
     //jiggy_ratio_2_string
     gcpausemenu_getLevelJiggyScore(level, &val, &max);
-    strcpy(D_8036C520[1].str, empty);
-    strIToA(D_8036C520[1].str, val);
-    strcat(D_8036C520[1].str, "/");
-    strIToA(D_8036C520[1].str, max);
-    strcat(D_8036C520[1].str, empty);
+    bk_strcpy(D_8036C520[1].str, empty);
+    bk_strIToA(D_8036C520[1].str, val);
+    bk_strcat(D_8036C520[1].str, "/");
+    bk_strIToA(D_8036C520[1].str, max);
+    bk_strcat(D_8036C520[1].str, empty);
 
     //honeycomb_ratio_2_string
     gcpausemenu_getLevelHoneycombScore(level, &val, &max);
-    strcpy(D_8036C520[2].str, empty);
-    strIToA(D_8036C520[2].str, val);
-    strcat(D_8036C520[2].str, "/");
-    strIToA(D_8036C520[2].str, max);
-    strcat(D_8036C520[2].str, empty);
+    bk_strcpy(D_8036C520[2].str, empty);
+    bk_strIToA(D_8036C520[2].str, val);
+    bk_strcat(D_8036C520[2].str, "/");
+    bk_strIToA(D_8036C520[2].str, max);
+    bk_strcat(D_8036C520[2].str, empty);
 
     //gametime_2_sting
-    strcpy(D_8036C520[3].str, empty);
-    strcat(D_8036C520[3].str, gcpausemenu_TimeToA(itemscore_timeScores_get(level)));
+    bk_strcpy(D_8036C520[3].str, empty);
+    bk_strcat(D_8036C520[3].str, gcpausemenu_TimeToA(itemscore_timeScores_get(level)));
 }
 
 void gcpausemenu_getTotalNoteScore(s32 *dst) {
@@ -406,25 +404,25 @@ void gcpausemenu_printTotals(void) {
 
     //note ratio 2 string
     gcpausemenu_getTotalNoteScore(&val);
-    strcpy(D_8036C520[0].str, D_8036C61C);
-    strIToA(D_8036C520[0].str, val);
-    strcat(D_8036C520[0].str, D_8036C61C);
+    bk_strcpy(D_8036C520[0].str, D_8036C61C);
+    bk_strIToA(D_8036C520[0].str, val);
+    bk_strcat(D_8036C520[0].str, D_8036C61C);
 
     //jiggy_ratio_2_string
     gcpausemenu_getTotalJiggyScore(&val);
-    strcpy(D_8036C520[1].str, D_8036C61C);
-    strIToA(D_8036C520[1].str, val);
-    strcat(D_8036C520[1].str, D_8036C61C);
+    bk_strcpy(D_8036C520[1].str, D_8036C61C);
+    bk_strIToA(D_8036C520[1].str, val);
+    bk_strcat(D_8036C520[1].str, D_8036C61C);
 
     //honeycomb_ratio_2_string
     gcpausemenu_getTotalHoneycombScore(&val);
-    strcpy(D_8036C520[2].str, D_8036C61C);
-    strIToA(D_8036C520[2].str, val);
-    strcat(D_8036C520[2].str, D_8036C61C);
+    bk_strcpy(D_8036C520[2].str, D_8036C61C);
+    bk_strIToA(D_8036C520[2].str, val);
+    bk_strcat(D_8036C520[2].str, D_8036C61C);
 
     //gametime_2_sting
-    strcpy(D_8036C520[3].str, D_8036C61C);
-    strcat(D_8036C520[3].str, gcpausemenu_TimeToA(itemscore_timeScores_getTotal()));
+    bk_strcpy(D_8036C520[3].str, D_8036C61C);
+    bk_strcat(D_8036C520[3].str, gcpausemenu_TimeToA(itemscore_timeScores_getTotal()));
 }
 
 s32 gcpausemenu_levelToMenuPage(enum level_e level) {
@@ -692,8 +690,8 @@ void gcPauseMenu_setState(enum gcpausemenu_state_e next_state) {
 
         case PAUSE_STATE_12_SNS_DISPOSE: /* 8B978 80312908 3C128038 */
             D_80383010.selection = D_80383010.page;
-            func_8033BD20((void **)&D_80383010.sns_egg_model); //free
-            func_8033BD20((void **)&D_80383010.ice_key_model); //free
+            func_8033BD20(&D_80383010.sns_egg_model); //free
+            func_8033BD20(&D_80383010.ice_key_model); //free
             break;
 
         case PAUSE_STATE_13_EXIT_PAUSE: /* 8B9A8 80312938 3C128038 */
@@ -833,7 +831,7 @@ void gcpausemenu_init(void) {
     D_80383010.b_button_frame = D_80383010.unk3_0 = D_80383010.b_button_alpha = 0;
     D_80383010.page_cnt = gcpausemenu_initLargestPageIndex();
     D_80383010.sns_alpha = D_80383010.sns_visible = D_80383010.unk70_31 = D_80383010.unk70_30 = 0;
-    baMotor_80250FC0();
+    baMotor_forceStop();
     gcPauseMenu_setState(PAUSE_STATE_0_MENU_INIT);
 }
 
@@ -1019,9 +1017,9 @@ s32 gcPauseMenu_update(void) {
     }
 
     controller_copyFaceButtons(0, face_button);
-    controller_getJoystick(0, joystick);
+    controller_copyJoystick(0, joystick);
     controller_copySideButtons(0, sp60);
-    func_8024E6E0(0, sp50);
+    controller_copyDpadButtons(0, sp50);
     func_80310D2C();
 
     for (i = 0; i < 4; i++) {
@@ -1179,7 +1177,7 @@ s32 gcPauseMenu_update(void) {
                         gcPauseMenu_setState(PAUSE_STATE_14_EXIT_GAME);
                     }
                     else {
-                        func_802E412C(1, 0);
+                        game_setMapTransitionWithStyle(1, 0);
                         transitionToMap(MAP_83_CS_GAME_OVER_MACHINE_ROOM, 0, 1);
                         gcPauseMenu_setState(PAUSE_STATE_13_EXIT_PAUSE);
                     }
@@ -1374,7 +1372,7 @@ s32 gcPauseMenu_update(void) {
             if (5.0 < D_80383010.unkC) {
                 if (!D_80383010.unk3_6) {
                     func_802DC560(0, 0);
-                    func_802E412C(1, 0);
+                    game_setMapTransitionWithStyle(1, 0);
                     // [port] Honor BootSequence so Save & Quit lands at the same place as a fresh boot.
                     {
                         s32 returnMap = getDefaultBootMap();

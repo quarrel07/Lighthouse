@@ -80,7 +80,7 @@ float port_drawDistanceMul(void) {
     return (float)level + 0.1f; // Nudge
 }
 
-void port_applyModelDrawDistanceCull(int* fadeFlag, float* cullMult, float* cullDist) {
+void port_applyModelDrawDistanceCull(bool* fadeFlag, float* cullMult, float* cullDist) {
     float mul = port_drawDistanceMul();
     *cullMult *= mul;
     *cullDist *= mul;
@@ -95,6 +95,9 @@ int port_spriteSizeCulled(float depth, float size, float baseThreshold, int disa
 }
 
 int port_shouldDisableLOD(void) {
+    if (IsDemoMode() && getGameMode() != GAME_MODE_4_PAUSED) {
+        return 0;
+    }
     return sDisableLOD;
 }
 }
@@ -264,8 +267,8 @@ static void OnModelDisplayListLoad_StaleTile(IEvent* event) {
 }
 
 static void RegisterStaleTileFix_Init() {
-    COND_HOOK(OnModelDisplayListLoad, EVENT_PRIORITY_NORMAL, CVarGetInteger(CVAR_FP_LOBBY_DOOR_TILE, 0),
-              OnModelDisplayListLoad_StaleTile);
+    COND_HOOK(OnModelDisplayListLoad, EVENT_PRIORITY_NORMAL,
+              CVarGetInteger(CVAR_FP_LOBBY_DOOR_TILE, 0) && !port_isRomhack(), OnModelDisplayListLoad_StaleTile);
 }
 
 static RegisterShipInitFunc staleTileFixInit(RegisterStaleTileFix_Init, { CVAR_FP_LOBBY_DOOR_TILE });
@@ -301,3 +304,18 @@ static void RegisterModelDrawDistFadeAlpha_Init() {
 }
 
 static RegisterShipInitFunc sModelDrawDistFadeAlphaInit(RegisterModelDrawDistFadeAlpha_Init);
+
+// ============
+// HUD COUNTERS
+// ============
+
+static void RegisterOffscreenHudCounters_Init() {
+    COND_VB_SHOULD(VB_ITEMPRINT_DRAW_COUNT, EVENT_PRIORITY_NORMAL, true, {
+        const enum item_e item = (enum item_e)va_arg(args, int);
+        if (item == ITEM_1D_GRUMBLIE || item == ITEM_1E_YUMBLIE) {
+            *should = false;
+        }
+    });
+}
+
+static RegisterShipInitFunc sOffscreenHudCountersInit(RegisterOffscreenHudCounters_Init);

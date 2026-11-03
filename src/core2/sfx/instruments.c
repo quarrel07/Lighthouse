@@ -3,26 +3,22 @@
 #include "functions.h"
 #include "variables.h"
 #include <n_audio/PR/n_libaudio.h>
+#include "port/Patches/Patches.h"
 
 extern void func_80243070(Struct87s *arg0);
-
-extern u8 *soundfont1ctl_ROM_START;
-extern u8 *soundfont1ctl_ROM_END;
-extern u8 *soundfont1tbl_ROM_START;
 
 Struct87s D_803835F0;
 ALBank *sSfxSoundBank;
 
 void sfxInstruments_init(void) {
     ALBank *bnk;
-    s32 size;
     ALInstrument *inst;
     ALBankFile *bnk_f;
 
-    // [port] parse BE ctl binary into native 64-bit structs
-    extern ALBankFile *port_alBnkfNew(u8 *ctlData, s32 ctlSize, u8 *tblData);
-    size = soundfont1ctl_ROM_END - soundfont1ctl_ROM_START;
-    bnk_f = port_alBnkfNew(soundfont1ctl_ROM_START, size, soundfont1tbl_ROM_START);
+    // [port] the soundfont ships as one resource per sound rather than a ctl/tbl pair;
+    // assemble the bank from the descriptor and the sounds it names
+    extern ALBankFile *port_alBnkfLoad(const char *descriptorPath);
+    bnk_f = port_alBnkfLoad("assets/sfx_bank");
 
     bnk = bnk_f->bankArray[0];
     inst = bnk->instArray[0];
@@ -52,7 +48,8 @@ void sfxInstruments_func_80335394(intptr_t arg0, f32 arg1) {
 void sfxInstruments_func_803353BC(intptr_t arg0, u16 arg1) {
     if(arg1 > 0x7fff)
         arg1 = 0x7fff;
-    func_80244978(arg0, AL_SEQP_PROG_EVT, arg1);
+//  func_80244978(arg0, AL_SEQP_PROG_EVT, arg1);
+    func_80244978(arg0, AL_SEQP_PROG_EVT, (s32)(arg1 * port_getSfxVolume()));
 }
 
 void sfxInstruments_func_803353F4(intptr_t arg0, s32 arg1) {

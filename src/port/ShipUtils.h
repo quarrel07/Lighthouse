@@ -16,9 +16,9 @@ json Ship_RetrieveSaveFile(int32_t filenum);
 extern std::string Ship_ConvertEnumToReadableName(const std::string& input);
 extern std::vector<file_progress_e> worldOpenFlags;
 
-extern std::vector<std::string> worldNameList;
 extern std::vector<std::string> abilityNameList;
 
+void TableCellCenteredSetCursorPosY(float size);
 void TableCellCenteredText(const char* text);
 uint32_t Ship_Hash(std::string str);
 std::string port_FormatTimeDisplay(uint64_t value);
@@ -53,6 +53,7 @@ const char* port_mapName(int map_id);
 
 // Get the boot sequence setting (0=Default, 1=Authentic, 2=FileSelect)
 int port_getBootSequence(void);
+int port_bootsUnloaded(void);
 
 // Currently selected game number (0-2), set at file pick. -1 if none.
 extern s32 gSelectedGameNum;

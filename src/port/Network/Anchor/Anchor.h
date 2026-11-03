@@ -1,7 +1,9 @@
 #pragma once
 #ifdef __cplusplus
 
+#include <atomic>
 #include <mutex>
+#include <optional>
 #include <queue>
 #include <map>
 #include <unordered_map>
@@ -59,13 +61,19 @@ private:
     bool isHandlingUpdateTeamState = false;
     bool isProcessingIncomingPacket = false;
     bool hasRequestedTeamState = false;
+    bool isReconnecting = false;
+    BKPlayerColorSet sentColors = {};
     std::queue<nlohmann::json> incomingPacketQueue;
     std::mutex incomingPacketQueueMutex;
     std::queue<nlohmann::json> outgoingPacketQueue;
     std::mutex outgoingPacketQueueMutex;
+    std::optional<nlohmann::json> heldTeamState;
+    std::vector<nlohmann::json> heldIncomingPackets;
+    std::atomic<bool> isHoldingTeamState{ false };
     std::unordered_map<uint32_t, DummyPlayer*> dummies;
 
     void FlushPendingJiggySpawns();
+    void UseHeldTeamState();
 
     nlohmann::json PrepClientState();
     nlohmann::json PrepRoomState();
@@ -89,7 +97,6 @@ private:
     void HandlePacket_DisableAnchor(nlohmann::json& payload);
     void HandlePacket_EntranceDiscovered(nlohmann::json& payload);
     void HandlePacket_GameComplete(nlohmann::json& payload);
-    void HandlePacket_GiveItem(nlohmann::json& payload);
     void HandlePacket_MapLoad(nlohmann::json& payload);
     void HandlePacket_PlayerSfx(nlohmann::json& payload);
     void HandlePacket_PlayerAnimChange(nlohmann::json& payload);
@@ -144,7 +151,6 @@ public:
     inline static const std::string DISABLE_ANCHOR = "DISABLE_ANCHOR";
     inline static const std::string ENTRANCE_DISCOVERED = "ENTRANCE_DISCOVERED";
     inline static const std::string GAME_COMPLETE = "GAME_COMPLETE";
-    inline static const std::string GIVE_ITEM = "GIVE_ITEM";
     inline static const std::string HANDSHAKE = "HANDSHAKE";
     inline static const std::string MAP_LOAD = "MAP_LOAD";
     inline static const std::string PLAYER_ANIM = "PLAYER_ANIM";
@@ -193,6 +199,8 @@ public:
     RoomState roomState;
     std::string lastWarnedRomhackLabel;
     std::string lastWarnedRandoState;
+    std::string lastClearedTeamStateSig;
+    std::atomic<bool> gameMismatchWithTeam{ false };
     bool hasCheckedRandoCompat = false;
 
     void Enable();
@@ -201,7 +209,6 @@ public:
     void OnConnected();
     void OnDisconnected();
     void ProcessOutgoingPackets();
-    void DrawMenu();
     void ProcessIncomingPacketQueue();
     void SendJsonToRemote(nlohmann::json packet);
     bool IsSaveLoaded();
@@ -230,10 +237,11 @@ public:
 
     void SendPacket_AuthorityState(u8 activity, bool claimed);
     void SendPacket_ClearTeamState(std::string teamId);
+    void ClearMismatchedTeamState(std::string teamId);
+    bool LocalGameMatchesRoom();
     void SendPacket_DamagePlayer(u32 clientId, u8 damageEffect, u8 damage);
     void SendPacket_EntranceDiscovered(u16 entranceIndex);
     void SendPacket_GameComplete();
-    void SendPacket_GiveItem(u16 modId, s16 getItemId);
     void SendPacket_Handshake();
     void SendPacket_MapLoad(GameMap map, s32 exit);
     void SendPacket_PlayerAnimChange(AssetID anim_id, f32 duration, AnimControl control, f32 start_position,
@@ -245,7 +253,7 @@ public:
     // client (used to hand a late arrival our current state directly).
     void SendPacket_PlayerTransformChange(Transformation tf_id, uint32_t targetClientId = 0);
     void SendPacket_PlayerUpdate(bool full = false, uint32_t targetClientId = 0);
-    void SendPacket_RequestTeamState(bool force = false);
+    bool SendPacket_RequestTeamState(bool force = false);
     void SendPacket_RequestTeleport(uint32_t clientId);
     void SendPacket_SetCheckStatus(s32 rc, s32 map);
     void SendPacket_SetFlag(u8 flagSpace, s16 flag);

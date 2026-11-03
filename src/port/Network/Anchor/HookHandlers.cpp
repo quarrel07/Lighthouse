@@ -7,6 +7,7 @@
 #include "port/Engine.h"
 #include "port/UI/Notification.h"
 #include "port/Patches/Patches.h"
+#include <cstring>
 #include <unordered_set>
 
 #include "functions.h"
@@ -17,6 +18,7 @@ float OTRGetDimensionFromLeftEdge(float v);
 float OTRGetDimensionFromRightEdge(float v);
 s32 chMrVile_netGetAnimMode(Actor* actor);
 void port_jiggySpawn_remove(int32_t jiggyId);
+int32_t port_jiggySpawn_isRecorded(int32_t jiggyId);
 int32_t port_mapFlag_wasSetRemotely(int32_t index);
 bool __chSmBottles_isAnySpiralMountainAbilityLearned(void);
 }
@@ -26,6 +28,7 @@ extern "C" void port_fpTwinkly_release(void) {
 }
 
 s32 Anchor_LevelOfMap(s32 map);
+void Anchor_DespawnCollectedCollectibles();
 
 // Every listener below that alters vanilla behaviour is wrapped in this. Presence-only rooms
 // (the global room, or sync turned off) must play exactly like single player.
@@ -120,6 +123,22 @@ bool Anchor_ScopedFlagExcluded(s32 space, s32 index) {
     if (excluded.contains((space << 16) | index)) {
         return true;
     }
+    // MM Juju's half-turn flag: animation state, kept local.
+    if (space == ANCHOR_FLAGSPACE_MAP_SPECIFIC && gsworld_getMap() == MAP_2_MM_MUMBOS_MOUNTAIN &&
+        index == MM_SPECIFIC_FLAG_9_JUJU_HAS_HALF_TURNED) {
+        return true;
+    }
+    // Chimpy's walk-off sets these as it plays, and each client plays its own.
+    if (space == ANCHOR_FLAGSPACE_MAP_SPECIFIC && gsworld_getMap() == MAP_2_MM_MUMBOS_MOUNTAIN &&
+        (index == MM_SPECIFIC_FLAG_0_CHIMPY_STUMP_RAISED || index == MM_SPECIFIC_FLAG_3_CHIMPY_HAS_LEFT)) {
+        return true;
+    }
+    // Holds every mutie in its greeting while one player reads it (crab.c); each client sets its own.
+    if (space == ANCHOR_FLAGSPACE_LEVEL_SPECIFIC &&
+        (s32)map_getLevel(gsworld_getMap()) == (s32)LEVEL_3_CLANKERS_CAVERN &&
+        index == LEVEL_FLAG_E_CC_MUTIE_SNIPPETS) {
+        return true;
+    }
     // BGS jiggy-switch timers (walkway=3, maze=0xC): kept local.
     if (space == ANCHOR_FLAGSPACE_MAP_SPECIFIC && gsworld_getMap() == MAP_D_BGS_BUBBLEGLOOP_SWAMP &&
         (index == 3 || index == 0xC)) {
@@ -132,6 +151,11 @@ bool Anchor_ScopedFlagExcluded(s32 space, s32 index) {
     // FP xmas tree star minigame (flags 2/3): per-player, kept local; result syncs via ANCHOR_PUZZLE_FP_TREE_ICE.
     if (space == ANCHOR_FLAGSPACE_MAP_SPECIFIC && gsworld_getMap() == MAP_27_FP_FREEZEEZY_PEAK &&
         (index == 2 || index == 3)) {
+        return true;
+    }
+    // Rewritten every frame from the local Twinkly box's state (twinklybox.c); the game is claimed via authority.
+    if (space == ANCHOR_FLAGSPACE_MAP_SPECIFIC && gsworld_getMap() == MAP_27_FP_FREEZEEZY_PEAK &&
+        index == FP_SPECIFIC_FLAG_D_UNKNOWN) {
         return true;
     }
     // FP bear cubs' presents-received flags: kept local; ANCHOR_PUZZLE_FP_PRESENTS syncs the result.
@@ -167,18 +191,10 @@ void Anchor::RegisterHooks() {
 
     // #region Hooks that are required for basic Anchor functionality
 
-    // COND_HOOK(OnActorSpawn, EVENT_PRIORITY_NORMAL, isConnected, [&]() {
-    //     SendPacket_UpdateClientState();
-
-    //    if (IsSaveLoaded()) {
-    //        RefreshClientActors();
-    //    }
-    //});
-
-    COND_HOOK(OnMapLoad, EVENT_PRIORITY_HIGH, true, [](IEvent* event) {
-        auto ev = reinterpret_cast<OnMapLoad*>(event);
-        if (ev->prevMap == MAP_91_FILE_SELECT && ev->nextMap != MAP_1E_CS_START_NINTENDO &&
-            ev->nextMap != MAP_1F_CS_START_RAREWARE) {
+    COND_HOOK(OnMapLoaded, EVENT_PRIORITY_HIGH, true, [](IEvent* event) {
+        auto ev = reinterpret_cast<OnMapLoaded*>(event);
+        // Peers take our map from the server's copy of our state, resent to all on every join or leave.
+        if (ev->nextMap != MAP_1E_CS_START_NINTENDO && ev->nextMap != MAP_1F_CS_START_RAREWARE) {
             Anchor::GetInstance()->SendPacket_UpdateClientState();
         }
         Anchor::GetInstance()->ClearDummies();
@@ -194,6 +210,7 @@ void Anchor::RegisterHooks() {
         auto* anchor = Anchor::GetInstance();
         if (Anchor_WorldSyncActive() && ev->nextMap != MAP_91_FILE_SELECT && ev->nextMap != MAP_1E_CS_START_NINTENDO &&
             ev->nextMap != MAP_1F_CS_START_RAREWARE) {
+            Anchor_DespawnCollectedCollectibles();
             anchor->SendPacket_RequestScopedState((GameMap)ev->nextMap);
 
             s32 enteredFlag = -1;
@@ -238,10 +255,11 @@ void Anchor::RegisterHooks() {
         Anchor::GetInstance()->SendPacket_MapLoad((GameMap)getDefaultBootMap(), gsworld_getExit());
     });
 
-    COND_HOOK(OnGameLoad, EVENT_PRIORITY_NORMAL, isConnected, [](IEvent* event) {
+    COND_HOOK(OnGameStart, EVENT_PRIORITY_NORMAL, isConnected, [](IEvent* event) {
         auto* anchor = Anchor::GetInstance();
         anchor->hasCheckedRandoCompat = false;
         anchor->reloadMapOnTeamState = false;
+        anchor->gameMismatchWithTeam = false;
         anchor->SendPacket_RequestTeamState(true);
     });
 
@@ -253,6 +271,11 @@ void Anchor::RegisterHooks() {
     COND_HOOK(GameFrameUpdate, EVENT_PRIORITY_HIGH, isConnected, [](IEvent* event) {
         auto* anchor = Anchor::GetInstance();
         anchor->SendPacket_PlayerUpdate();
+        BKPlayerColorSet colors;
+        PlayerColors_getLocal(&colors);
+        if (std::memcmp(&colors, &anchor->sentColors, sizeof(colors)) != 0) {
+            anchor->SendPacket_UpdateClientState();
+        }
         anchor->ProcessIncomingPacketQueue();
         anchor->RefreshClientActors();
         anchor->UpdateDummies();
@@ -544,6 +567,17 @@ void Anchor::RegisterHooks() {
         anchor->SendPacket_SpawnJiggy((s16)ev->jiggyId, ev->x, ev->y, ev->z);
     });
 
+    COND_HOOK(OnIsJiggyScoreSpawned, EVENT_PRIORITY_LOW, isConnected, [](IEvent* event) {
+        auto ev = reinterpret_cast<OnIsJiggyScoreSpawned*>(event);
+        if (!Anchor_WorldSyncActive() || !Anchor::GetInstance()->IsSaveLoaded()) {
+            return;
+        }
+        if (port_jiggySpawn_isRecorded(ev->jiggyId)) {
+            event->Cancelled = true;
+            ev->result = 1;
+        }
+    });
+
     COND_HOOK(OnHoneycombDropSpawn, EVENT_PRIORITY_NORMAL, isConnected, [](IEvent* event) {
         auto ev = reinterpret_cast<OnHoneycombDropSpawn*>(event);
         Anchor::GetInstance()->SendPacket_SpawnHoneycomb((s16)ev->honeycombId, ev->bundleId, ev->x, ev->y, ev->z);
@@ -586,37 +620,4 @@ void Anchor::RegisterHooks() {
               [](IEvent* event) { Anchor::GetInstance()->SendPacket_UpdateTeamState(); });
 
     // #endregion
-
-    //    COND_HOOK(OnPlayerSfx, isConnected, [&](u16 sfxId) { SendPacket_PlayerSfx(sfxId); });
-    //
-    //    COND_HOOK(OnRandoSetCheckStatus, isConnected, [&](RandomizerCheck rc, RandomizerCheckStatus status) {
-    //        if (!isHandlingUpdateTeamState) {
-    //            SendPacket_SetCheckStatus(rc);
-    //        }
-    //    });
-    //
-    //    COND_HOOK(OnRandoSetIsSkipped, isConnected, [&](RandomizerCheck rc, bool isSkipped) {
-    //        if (!isHandlingUpdateTeamState) {
-    //            SendPacket_SetCheckStatus(rc);
-    //        }
-    //    });
-    //
-    //    COND_HOOK(OnRandoEntranceDiscovered, isConnected,
-    //              [&](u16 entranceIndex, u8 isReversedEntrance) { SendPacket_EntranceDiscovered(entranceIndex); });
-    //
-    //    COND_ID_HOOK(OnBossDefeat, ACTOR_BOSS_GANON2, isConnected, [&](void* refActor) { SendPacket_GameComplete();
-    //    });
-    //
-    //    COND_HOOK(OnItemReceive, isConnected, [&](GetItemEntry itemEntry) {
-    //        // Handle vanilla dungeon items a bit differently
-    //        if (itemEntry.modIndex == MOD_NONE &&
-    //            (itemEntry.itemId >= ITEM_KEY_BOSS && itemEntry.itemId <= ITEM_KEY_SMALL)) {
-    //            SendPacket_UpdateDungeonItems();
-    //            return;
-    //        }
-    //
-    //        SendPacket_GiveItem(itemEntry.tableId, itemEntry.getItemId);
-    //    });
-    //
-    //    // #endregion
 }

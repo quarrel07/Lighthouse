@@ -1,5 +1,6 @@
 #include "port/Network/Anchor/Anchor.h"
 #include "port/Network/Anchor/JsonConversions.hpp"
+#include "port/Enhancements/Retention/Retention.h"
 #include <nlohmann/json.hpp>
 #include <libultraship/libultraship.h>
 #include "port/Romhack/RomhackConfig.h"
@@ -7,6 +8,7 @@
 #include "port/Rando/Rando.h"
 #include "port/UI/LighthouseGui.hpp"
 #include "port/UI/LighthouseModals.h"
+#include "port/UI/Notification.h"
 
 #include "variables.h"
 
@@ -38,8 +40,13 @@ nlohmann::json Anchor::PrepRoomState() {
     payload["shareConsumables"] = CVarGetInteger(CVAR_REMOTE_ANCHOR("RoomSettings.ShareConsumables"), 0);
     payload["isRomHack"] = port_isRomhack();
     payload["romhackName"] = Lighthouse::CurrentRomhackLabel();
-    payload["isRando"] = (bool)IS_RANDO;
-    payload["seed"] = (int32_t)(IS_RANDO ? RANDO_SEED : 0);
+    if (selectedFileNum != DEFAULT_FILE_NUM) {
+        payload["isRando"] = (bool)IS_RANDO;
+        payload["seed"] = (int32_t)(IS_RANDO ? RANDO_SEED : 0);
+    } else {
+        payload["isRando"] = roomState.isRando;
+        payload["seed"] = roomState.seed;
+    }
 
     return payload;
 }
@@ -66,14 +73,26 @@ void Anchor::HandlePacket_UpdateRoomState(nlohmann::json& payload) {
         roomState.shareConsumables = 0;
         roomState.isRomhack = false;
         roomState.romhackName.clear();
+        port_noteRetention_setForced(0);
+        port_jinjoRetention_setForced(0);
         return;
     }
 
     roomState.isRomhack = payload["state"]["isRomHack"].get<bool>();
     roomState.romhackName = payload["state"]["romhackName"].get<std::string>();
+    roomState.ownerClientId = payload["state"]["ownerClientId"].get<uint32_t>();
     const std::string localLabel = Lighthouse::CurrentRomhackLabel();
     if (roomState.romhackName != localLabel) {
-        if (roomState.romhackName != lastWarnedRomhackLabel) {
+        // Only act on ownership the server has actually handed out.
+        if (ownClientId != 0 && roomState.ownerClientId == ownClientId) {
+            roomState.isRomhack = port_isRomhack();
+            roomState.romhackName = localLabel;
+            lastWarnedRomhackLabel.clear();
+            SendPacket_UpdateRoomState();
+            Notification::Emit({
+                .message = "Room now set to " + localLabel,
+            });
+        } else if (roomState.romhackName != lastWarnedRomhackLabel) {
             lastWarnedRomhackLabel = roomState.romhackName;
             std::string msg = "There's a romhack mismatch between your client and the server:\n\n";
             msg += Lighthouse::DescribeRomhackMismatch(port_isRomhack(), localLabel, roomState.isRomhack,
@@ -87,16 +106,24 @@ void Anchor::HandlePacket_UpdateRoomState(nlohmann::json& payload) {
         lastWarnedRomhackLabel.clear();
     }
 
-    roomState.ownerClientId = payload["state"]["ownerClientId"].get<uint32_t>();
     roomState.pvpMode = payload["state"]["pvpMode"].get<u8>();
     roomState.showLocationsMode = payload["state"]["showLocationsMode"].get<u8>();
     roomState.teleportMode = payload["state"]["teleportMode"].get<u8>();
+    const bool wasSyncing = roomState.syncItemsAndFlags != 0;
     roomState.syncItemsAndFlags = payload["state"]["syncItemsAndFlags"].get<u8>();
+    // Retention holds the team's notes and jinjos, so it's only forced while syncing them.
+    port_noteRetention_setForced(IsWorldSyncActive() ? 1 : 0);
+    port_jinjoRetention_setForced(IsWorldSyncActive() ? 1 : 0);
     roomState.shareConsumables = payload["state"].value("shareConsumables", (u8)0);
     roomState.isRando = payload["state"].value("isRando", false);
     roomState.seed = payload["state"].value("seed", (int32_t)0);
 
     CheckRandoRoomCompatibility();
+
+    // Enable clears the room state, so OnConnected couldn't tell yet that this room syncs.
+    if (!wasSyncing && SendPacket_RequestTeamState()) {
+        reloadMapOnTeamState = true;
+    }
 }
 
 void Anchor::CheckRandoRoomCompatibility() {
@@ -127,6 +154,20 @@ void Anchor::CheckRandoRoomCompatibility() {
 
     if (msg.empty()) {
         lastWarnedRandoState.clear();
+        return;
+    }
+
+    // As with the romhack label above: the room's recorded seed is only as fresh as the last
+    // session that pushed it, and the owner is the one who says what the room is running.
+    if (ownClientId != 0 && roomState.ownerClientId == ownClientId) {
+        roomState.isRando = localRando;
+        roomState.seed = localSeed;
+        lastWarnedRandoState.clear();
+        SendPacket_UpdateRoomState();
+        Notification::Emit({
+            .message = localRando ? "Room now set to randomizer seed " + std::to_string(localSeed)
+                                  : "Room now set to a no-rando game",
+        });
         return;
     }
 

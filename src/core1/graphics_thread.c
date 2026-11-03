@@ -248,7 +248,7 @@ void thread5_handleSyncEvent(void) {
 extern u64 osClockRate;
 
 void thread5_handleDPEvent(void) {
-    if ((sUnkFlag2 << 1) < 0) {
+    if (sUnkFlag2_Saved & 0x40000000) {
         osDpSetStatus(DPC_SET_FREEZE);
         sCurrentFramebuffer = osViGetCurrentFramebuffer();
         viMgr_func_8024BFAC();
@@ -277,7 +277,7 @@ void thread5_handleVIRetraceEvent(void) {
             osDpSetStatus(DPC_CLR_FREEZE);
 
             sUnkFlag2_Saved = sUnkFlag2;
-            // dummy_func_8025AFB8();
+            // core1_1D590_func_8025AFB8();
 
             if (sUnkFlag2_Saved & 1) {
                 sUnkCounter3 = 30;
@@ -311,14 +311,14 @@ void thread5_handleVIRetraceEvent(void) {
     audiotimer_trigger++;
     if (!(audiotimer_trigger & 1)) {
         osStopTimer(&sAudioTimer);
-        osSetTimer(&sAudioTimer, 280000, 0, &sThread5MesgQueue, OS_MESG_32(THREAD5_MESSAGE_EVENT_AUDIO_TIMER));
+        osSetTimer(&sAudioTimer, 280000, 0, &sThread5MesgQueue, OS_MESG_PTR((void*)(uintptr_t)THREAD5_MESSAGE_EVENT_AUDIO_TIMER));
     }
     if (sEnableControllerTimer && OS_SiPumpLive()) {
         osStopTimer(&sControllerTimer);
 #if VERSION == VERSION_USA_1_0
-        osSetTimer(&sControllerTimer, ((osClockRate / 60)* 2) / 3, 0, &sThread5MesgQueue, OS_MESG_32(THREAD5_MESSAGE_EVENT_CONT_TIMER));
+        osSetTimer(&sControllerTimer, ((osClockRate / 60)* 2) / 3, 0, &sThread5MesgQueue, OS_MESG_PTR((void*)(uintptr_t)THREAD5_MESSAGE_EVENT_CONT_TIMER));
 #elif VERSION == VERSION_PAL
-        osSetTimer(&sControllerTimer, ((osClockRate / 60.0)* 2) / 3, 0, &sThread5MesgQueue, OS_MESG_32(THREAD5_MESSAGE_EVENT_CONT_TIMER));
+        osSetTimer(&sControllerTimer, ((osClockRate / 60.0)* 2) / 3, 0, &sThread5MesgQueue, OS_MESG_PTR((void*)(uintptr_t)THREAD5_MESSAGE_EVENT_CONT_TIMER));
 #endif
     }
 }
@@ -468,7 +468,7 @@ void thread5_handlePreNMIEvent(void) {
         // if(&osViModeMpalLpn1){}
         osViSetMode(&osViModePalLpn1);
 #endif
-        baMotor_80250FC0(); //stop controller motors
+        baMotor_forceStop(); //stop controller motors
         do {
             osDpSetStatus(DPC_STATUS_FLUSH);
         } while (1);
@@ -505,7 +505,7 @@ void thread5_entry(void *arg) {
             else if (msg.data32 == THREAD5_MESSAGE_EVENT_FAULT)       { do{}while(1); }
             else if (msg.data32 == THREAD5_MESSAGE_EVENT_PRENMI)      { thread5_handlePreNMIEvent(); }
             else if (msg.data32 == THREAD5_MESSAGE_EVENT_DEBUG) {  }
-            else if (msg.data32 == THREAD5_MESSAGE_EVENT_CONT_TIMER)  { pfsManager_getStartReadData(); }
+            else if (msg.data32 == THREAD5_MESSAGE_EVENT_CONT_TIMER)  { joy_getStartReadData(); }
         }
         else {
             if (((struct ucode_task_data_s *)msg.ptr)->task_type == UCODE_TASK_TYPE_AUDIO) { thread5_handleAudioTaskMesg(msg); }
@@ -521,11 +521,11 @@ void thread5_create(void) {
     u8 *yield_data_ptr;
     osCreateMesgQueue(&sThread5MesgQueue, sThread5MesgBuffer, 20);
     osCreateMesgQueue(&sThread5SyncMesgQueue, sThread5SyncMesgBufer, 10);
-    osSetEventMesg(OS_EVENT_DP, &sThread5MesgQueue, OS_MESG_32(THREAD5_MESSAGE_EVENT_DP));
-    osSetEventMesg(OS_EVENT_SP, &sThread5MesgQueue, OS_MESG_32(THREAD5_MESSAGE_EVENT_SP));
-    osSetEventMesg(OS_EVENT_FAULT, &sThread5MesgQueue, OS_MESG_32(THREAD5_MESSAGE_EVENT_FAULT));
-    osSetEventMesg(OS_EVENT_PRENMI, &sThread5MesgQueue, OS_MESG_32(THREAD5_MESSAGE_EVENT_PRENMI));
-    viMgr_registerSignalMesg(&sThread5MesgQueue, OS_MESG_32(THREAD5_MESSAGE_EVENT_VI_RETRACE));
+    osSetEventMesg(OS_EVENT_DP, &sThread5MesgQueue, OS_MESG_PTR((void*)(uintptr_t)THREAD5_MESSAGE_EVENT_DP));
+    osSetEventMesg(OS_EVENT_SP, &sThread5MesgQueue, OS_MESG_PTR((void*)(uintptr_t)THREAD5_MESSAGE_EVENT_SP));
+    osSetEventMesg(OS_EVENT_FAULT, &sThread5MesgQueue, OS_MESG_PTR((void*)(uintptr_t)THREAD5_MESSAGE_EVENT_FAULT));
+    osSetEventMesg(OS_EVENT_PRENMI, &sThread5MesgQueue, OS_MESG_PTR((void*)(uintptr_t)THREAD5_MESSAGE_EVENT_PRENMI));
+    viMgr_registerSignalMesg(&sThread5MesgQueue, OS_MESG_PTR((void*)(uintptr_t)THREAD5_MESSAGE_EVENT_VI_RETRACE));
     sSyncCounter = 0;
     sTask7Handled = 0;
     sUnkFlag2 = sUnkFlag2_Saved = 2;

@@ -34,7 +34,7 @@ Actor *chtrainers_draw(ActorMarker *marker, Gfx **gfx, Mtx **mtx, Vtx **vtx){
 
 void _chtrainers_802CA378(Actor *this, bool arg1){
     f32 sp24[3];
-    if(ability_isUnlocked(ABILITY_11_TURBO_TALON))
+    if(player_isAbilityUnlocked(ABILITY_11_TURBO_TALON))
         actor_setOpacity(this, 0xff);
     else
         actor_setOpacity(this, 0x87);
@@ -71,13 +71,14 @@ void chtrainers_update(Actor *this){
         subaddie_set_state(this, 0);
     }
 
-    if(!volatileFlag_get(VOLATILE_FLAG_F_HAS_MEET_TURBO_SHOES) && ability_isUnlocked(ABILITY_11_TURBO_TALON)){
+    if(!volatileFlag_get(VOLATILE_FLAG_F_HAS_MEET_TURBO_SHOES) && player_isAbilityUnlocked(ABILITY_11_TURBO_TALON)){
         volatileFlag_set(VOLATILE_FLAG_F_HAS_MEET_TURBO_SHOES, true);
     }
 
     switch(this->state){
         case 0://L802CA5A8
-            if(func_803296D8(this, 2000) || sp2C){
+//          if(func_803296D8(this, 2000) || sp2C){
+            if(EventSystem_Should(VB_ACTOR_UPDATE_DISTANCE, func_803296D8(this, 2000), this) || sp2C){
                 if( subaddie_playerIsWithinSphereAndActive(this, 0xfa)
                     && !volatileFlag_get(VOLATILE_FLAG_F_HAS_MEET_TURBO_SHOES)
                     && player_getTransformation() == TRANSFORM_1_BANJO
@@ -115,7 +116,7 @@ void chtrainers_update(Actor *this){
 }
 
 bool chtrainers_canUse(Actor *this){
-    return this->unk10_12 && ability_isUnlocked(ABILITY_11_TURBO_TALON);
+    return this->unk10_12 && player_isAbilityUnlocked(ABILITY_11_TURBO_TALON);
 }
 
 f32 chtrainers_getDuration(Actor *this){

@@ -15,28 +15,39 @@ extern "C" {
 #endif
 
 typedef struct sprite_prop_s{
-    u32 spriteId:0xC;
-    u32 unk0_19:0x1;
-    u32 rgb_remove_red:0x3;
-    u32 rgb_remove_green:0x3;
-    u32 rgb_remove_blue:0x3;
-    u32 scale:0x8;
-    u32 isMirrored:0x1;
-    u32 pad0_0:0x1;
+    u32 spriteId:12;
+    u32 unk0_19:1;
+    u32 rgb_remove_red:3;
+    u32 rgb_remove_green:3;
+    u32 rgb_remove_blue:3;
+    u32 scale:8;
+    u32 isMirrored:1;
+    u32 pad0_0: 1;
 #if UINTPTR_MAX > 0xFFFFFFFFu
     u32 _pad64;
 #endif
-    s16 unk4[3];
+    union
+    {
+        s16 position[3];
+        struct {
+            s16 position_x;
+            s16 position_y;
+            s16 position_z;
+        };
+    };
     u16 frame: 5;
     u16 unk8_10: 5;
-    u16 unk8_5: 1;
+    u16 unk8_5: 1; // other structs use this to determine whether it's mirrored, however for sprites another bit address is used
     u16 isNotFeatherEggOrNote: 1;
-    u16 unk8_3: 1;
+    u16 unk8_3: 1; // is initialized?
     u16 isCollisionResolved: 1;
-    u16 isModelProp:1;
-    u16 isActorProp:1;
+    u16 isModelProp:1; // always false for this struct
+    u16 isActorProp:1; // always false for this struct
 } SpriteProp;
 
+#define SPRITE_ASSET_OFFSET 0x572
+
+// 3D Poly
 typedef struct model_prop_s{
     union{
         u16 unk0;
@@ -45,17 +56,28 @@ typedef struct model_prop_s{
             u16 pad0_19:4;
         };
     };
-    u8 yaw;
-    u8 roll;
+    u8 yaw;  // degrees / 2, never above 179
+    u8 roll; // degrees / 2, never above 179
 #if UINTPTR_MAX > 0xFFFFFFFFu
     u32 _pad64;
 #endif
-    s16 unk4[3];
-    u8 scale;
-    u8 padB_7 :2;
-    u8 unkB_5 :1;
-    u8 unkB_4 :1;
-    u8 padB_3 :4;
+    union
+    {
+        s16 position[3];
+        struct {
+            s16 position_x;
+            s16 position_y;
+            s16 position_z;
+        };
+    };
+    u8 scale; // 0.00 to 2.55
+    u8 padB_7:2;
+    u8 unkB_5:1;
+    u8 unkB_4:1;
+    u8 unk8_3:1; // is initialized?
+    u8 isCollisionResolved:1;
+    u8 isModelProp:1; // always true for this struct
+    u8 isActorProp:1; // always false for this struct
 } ModelProp;
 
 #define MODEL_ASSET_OFFSET 0x2D1
@@ -70,17 +92,23 @@ typedef struct actor_prop_s{
     union {
         struct {
             struct actorMarker_s* marker;
-            s16 x;
-            s16 y;
-            s16 z;
+            union
+            {
+                s16 position[3]; // position_
+                struct {
+                    s16 position_x;
+                    s16 position_y;
+                    s16 position_z;
+                };
+            };
             u16 frame:5;
             u16 unk8_10:5;
             u16 isMirrored:1;
             u16 isNotFeatherEggOrNote:1;
-            u16 unk8_3:1;
+            u16 unk8_3:1; // is initialized?
             u16 isCollisionResolved:1;
-            u16 isModelProp:1;
-            u16 isActorProp:1;
+            u16 isModelProp:1; // always false for this struct
+            u16 isActorProp:1; // always true for this struct
         };
         s32 words[ACTORPROP_WORD_BASE + 2];
     };
@@ -230,8 +258,9 @@ typedef struct actor_s{
         ActorLocal_Jinjo jinjo;
         ActorLocal_SM_4070 sm_4070;
         u8  local[1];
-        struct{ 
-            u8  unk7C[0x40];
+        struct{
+//          u8  unk7C[0x40];
+            u8  unk7C[0x70];
             u8  unkBC[0x30];
         };
         
@@ -301,8 +330,17 @@ typedef struct actor_s{
     uintptr_t unk154;
     ParticleEmitter *unk158[2];
     void *unk160; //saved marker->unk54
-    u8  unk164[0x2];
-    u8  unk166;
+    // [port] The hit counters are indexed 0-2, so unk166 is unk164[2]. Reading or writing [2] of a
+    // two-byte array is undefined, and an optimizing compiler doesn't have to keep it.
+//  u8  unk164[0x2];
+//  u8  unk166;
+    union {
+        u8  unk164[0x3];
+        struct {
+            u8  pad164[0x2];
+            u8  unk166;
+        };
+    };
     s8  pad167[0x1];
     uintptr_t unk168; //saved marker->unk58
     u32  unk16C_31:27; //saved s1->marker->unk5C
@@ -351,36 +389,49 @@ typedef union prop_s
 #else
         u32 pad0;
 #endif
-        s16 unk4[3];
-        // s16 unk6;
-        u16 pad8_15: 10;
-        u16 unk8_5: 1;
-        u16 unk8_4: 1;
-        u16 unk8_3: 1;
-        u16 unk8_2: 1;
-        u16 unk8_1: 1;
-        u16 markerFlag: 1;
+        union
+        {
+            s16 position[3];
+            struct {
+                s16 position_x;
+                s16 position_y;
+                s16 position_z;
+            };
+        };
+        s16 pad8_15:10;
+        u16 isMirrored:1;
+        u16 isNotFeatherEggOrNote:1;
+        u16 unk8_3:1; // is initialized?
+        u16 isCollisionResolved:1;
+        u16 isModelProp:1;
+        u16 isActorProp:1;
     };
 } Prop;
 
 typedef struct {
-    s16 x;
-    s16 y;
-    s16 z;
-    u16 radius: 9; // selector / volume / diameter?
-    u16 bit6: 6; // category?
-    u16 bit0: 1;
-    u16 unk8;       //actor_id?
-    u8 unkA;        //marker_id
+    union
+    {
+        s16 position[3];
+        struct {
+            s16 position_x;
+            s16 position_y;
+            s16 position_z;
+        };
+    };
+    u16 selector_or_radius:9; // horizontal radius; the volume is a cylinder
+    u16 category:6;
+    u16 bit0:1;
+    u16 actorId;
+    u8 markerId;
     u8 padB;
-    u32 yaw: 9; // unkC_31
-    u32 scale: 23; // unkC_22
-    u32 unk10_31: 12; // unk10_31 and unk10_19 seem to be related
-    u32 unk10_19: 12; // unk10_31 and unk10_19 seem to be related
-    u32 pad10_7: 1;
-    u32 unk10_6: 1; // isInitialized flag?
-    u32 pad10_5: 4;
-    u32 unk10_0: 2; // is only for used in func_803303B8
+    u32 yaw:9; // degrees, never above 359
+    u32 scale:23;
+    u32 unk10_31:12; // unk10_31 and unk10_19 seem to be related
+    u32 unk10_19:12; // unk10_31 and unk10_19 seem to be related
+    u32 pad10_7:1;
+    u32 unk10_6:1; // isInitialized flag?
+    u32 pad10_5:4;
+    u32 unk10_0:2; // is only for used in func_803303B8
 } NodeProp; // size = 20 (0x14) bytes
 
 typedef struct {
@@ -426,7 +477,7 @@ typedef struct actor_array{
 // Actor needs 8-byte alignment on 64-bit, which would insert 4 bytes
 // of padding, but serialized data places Actors immediately after cnt.
 #pragma pack(push, 4)
-typedef struct {
+typedef struct actor_list_savestate_s {
     u32 cnt;
     Actor data[];
 }ActorListSaveState;

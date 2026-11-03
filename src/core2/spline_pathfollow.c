@@ -650,7 +650,7 @@ void func_803411B0(void){
                     *((u8 *)temp_v0_16 + 11) = (u8)D_80371E78;
 #endif
 
-                    memcpy(var_s1_2, temp_v0_16, sizeof(Union_glspline));
+                    bk_memcpy(var_s1_2, temp_v0_16, sizeof(Union_glspline));
 #if !(defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)
                     // so reversed LE bitfield structs extract correct values
                     glspline_convert_from_nodeprop(var_s1_2);
@@ -670,9 +670,9 @@ void func_803411B0(void){
                     var_s1_2 = var_s0_2 + 1;
 
                     if (var_s0_2->common.unk0 > var_s1_2->common.unk0) {
-                        memcpy(&sp80, var_s0_2, sizeof(Union_glspline));
-                        memcpy(var_s0_2, var_s1_2, sizeof(Union_glspline));
-                        memcpy(var_s1_2, &sp80, sizeof(Union_glspline));
+                        bk_memcpy(&sp80, var_s0_2, sizeof(Union_glspline));
+                        bk_memcpy(var_s0_2, var_s1_2, sizeof(Union_glspline));
+                        bk_memcpy(var_s1_2, &sp80, sizeof(Union_glspline));
                         var_s2++;
                     }
                 }
@@ -1068,7 +1068,7 @@ s32 func_803422D4(Actor *arg0, Union_glspline *arg1, SplineList *arg2){
             arg0->unk5C = ((f32) arg1->t1.unk8.bit21) / 4;
             anim_id = lookup_getAnimAssetId(arg1->t1.unk8.bit31);
             arg0->anctrl_asset_id = anim_id;
-            if ((s16)anim_id != -2) { // [port] 0xFFFE sentinel = no animation; truncates to 0x7FFE in 15-bit field, overflows animBinCache on PC
+            if ((s16)anim_id != -2) { // [port] 0xFFFE sentinel = no animation; truncates to 0x7FFE in 15-bit field, overflows animcommoncache_list on PC
                 if (arg0->anctrl == 0) {
                     arg0->anctrl = anctrl_new(0);
                     anctrl_reset(arg0->anctrl);
@@ -1361,11 +1361,9 @@ s32 func_80343694(Actor *actor, s32 indx, s32 begin, s32 end, s32 count, s32 str
     }
     if ((D_80371E80 == 1) && (var_v1 == 1)) {
         actor->unk48 = sp48 + 0.00001;
-#if UINTPTR_MAX > 0xFFFFFFFFu
-        // On N64 the position desync during pause is sub-pixel at 240p.
-        // On PC at higher resolution the stale position is visible.
+        // [port] On N64 the position desync during pause is sub-pixel at 240p.
+        // At port resolutions the stale position is visible.
         func_80323240(D_80371E70[indx], actor->unk48, actor->position);
-#endif
     }
     return var_v1;
 }

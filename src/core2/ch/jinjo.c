@@ -4,7 +4,7 @@
 #include "port/Enhancements/Retention/Retention.h"
 
 extern void subaddie_set_state_with_direction(Actor *, s32, f32 , s32);
-extern f32 func_80309B24(f32*);
+extern f32 mapModel_getWaterSurfaceY(f32*);
 extern void func_8032BB88(Actor *, s32, s32);
 
 void chJinjo_update(Actor *this);
@@ -128,7 +128,7 @@ void chJinjo_update(Actor * this){
         this->initialized = true;
         local->unk0 = 1;
         local->unk4 = 0;
-        local->unk8 = (this->position_y < func_80309B24(this->position));
+        local->unk8 = (this->position_y < mapModel_getWaterSurfaceY(this->position));
         this->marker->collisionFunc = __chJinjo_collected;
         marker_setFreeMethod(this->marker, __chJinjo_free);
         if(volatileFlag_get(VOLATILE_FLAG_C1_IN_FINAL_CHARACTER_PARADE)){
@@ -194,7 +194,7 @@ void chJinjo_update(Actor * this){
                     jiggy_position[1] += 50.0f;
                     jiggy_spawn(10 * level_get() - 9, jiggy_position);
                 }//L802CE0CC
-                core1_ce60_incOrDecCounter(false);
+                midichannel_incOrDecCounter(false);
                 func_8032BB88(this, 0, 4000);
                 if(local->unk4){
                     coMusicPlayer_playMusic(COMUSIC_30_5TH_JINJO_COLLECTED, 28000);
@@ -270,7 +270,7 @@ void chJinjo_update(Actor * this){
                     if(local->unk4 == 0){
                         func_8032BB88(this, -1, 4000);
                         if (EventSystem_Should(VB_SET_JINJO_COUNT, true)) {
-                            core1_ce60_incOrDecCounter(true);
+                            midichannel_incOrDecCounter(true);
                         }
                     }
                 }//L802CE518
@@ -287,7 +287,7 @@ void chJinjo_update(Actor * this){
                 if(local->unk4 && actor_animationIsAt(this, 0.95f)){
                     func_8032BB88(this, -1, 4000);
                     if (EventSystem_Should(VB_SET_JINJO_COUNT, true)) {
-                        core1_ce60_incOrDecCounter(true);
+                        midichannel_incOrDecCounter(true);
                     }
                 }
             }//L802CE598

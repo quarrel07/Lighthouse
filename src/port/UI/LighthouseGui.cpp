@@ -17,15 +17,17 @@
 
 // #include "Enhancements/Trackers/ItemTracker/ItemTracker.h"
 // #include "Enhancements/Trackers/ItemTracker/ItemTrackerSettings.h"
+#include "port/Enhancements/Cosmetics/CosmeticsEditor.h"
 #include "port/Enhancements/Trackers/DisplayOverlay.h"
+#include "port/Enhancements/Trackers/WorldTracker/WorldTracker.h"
 // #include "Enhancements/Trackers//TimeSplits/Timesplits.h"
 // #include "Enhancements/Trackers/TimeSplits/TimesplitsSettings.h"
 #include "port/Rando/CheckTracker/CheckTracker.h"
 
 #include "Notification.h"
+#include "Crosshair.h"
 #include "port/Controller/Mapper.h"
 #include "port/Network/Anchor/Anchor.h"
-#include "port/Enhancements/Backports/EggAim.h"
 #include "LighthouseMenu.h"
 #include "LighthouseInputEditorWindow.h"
 #include "LighthouseModMenuWindow.h"
@@ -53,7 +55,7 @@ std::shared_ptr<LighthouseRomhackMenuWindow> mRomhackMenuWindow;
 std::shared_ptr<SaveEditorWindow> mSaveEditorWindow;
 std::shared_ptr<GameplayToolsWindow> mGameplayToolsWindow;
 // std::shared_ptr<HudEditorWindow> mHudEditorWindow;
-// std::shared_ptr<CosmeticEditorWindow> mCosmeticEditorWindow;
+std::shared_ptr<CosmeticsEditorWindow> mCosmeticsEditorWindow;
 // std::shared_ptr<ActorViewerWindow> mActorViewerWindow;
 // std::shared_ptr<CollisionViewerWindow> mCollisionViewerWindow;
 // std::shared_ptr<EventLogWindow> mEventLogWindow;
@@ -64,6 +66,8 @@ std::shared_ptr<LighthouseMenu> mLighthouseMenu;
 std::shared_ptr<Notification::Window> mNotificationWindow;
 std::shared_ptr<Rando::CheckTracker::CheckTrackerWindow> mRandoCheckTrackerWindow;
 std::shared_ptr<Rando::CheckTracker::SettingsWindow> mRandoCheckTrackerSettingsWindow;
+std::shared_ptr<WorldTracker::WorldTrackerWindow> mWorldTrackerWindow;
+std::shared_ptr<WorldTracker::SettingsWindow> mWorldTrackerSettingsWindow;
 // std::shared_ptr<ItemTrackerWindow> mItemTrackerWindow;
 // std::shared_ptr<ItemTrackerSettingsWindow> mItemTrackerSettingsWindow;
 std::shared_ptr<DisplayOverlayWindow> mDisplayOverlayWindow;
@@ -71,7 +75,7 @@ std::shared_ptr<DisplayOverlayWindow> mDisplayOverlayWindow;
 // std::shared_ptr<TimesplitsSettingsWindow> mTimesplitsSettingsWindow;
 std::shared_ptr<InputViewer> mInputViewer;
 std::shared_ptr<InputViewerSettingsWindow> mInputViewerSettings;
-std::shared_ptr<EggAimCrosshairWindow> mEggAimCrosshair;
+std::shared_ptr<Crosshair::Window> mCrosshairWindow;
 std::shared_ptr<LighthouseModalWindow> mModalWindow;
 std::shared_ptr<EventDebuggerWindow> mEventDebuggerWindow;
 std::shared_ptr<OcclusionDebugWindow> mOcclusionDebugWindow;
@@ -142,9 +146,9 @@ void SetupGuiElements() {
     // mHudEditorWindow = std::make_shared<HudEditorWindow>(CVAR_WINDOW("HudEditor"), "HUD Editor", ImVec2(480, 600));
     // gui->AddGuiWindow(mHudEditorWindow);
 
-    // mCosmeticEditorWindow =
-    //     std::make_shared<CosmeticEditorWindow>(CVAR_WINDOW("CosmeticEditor"), "Cosmetic Editor", ImVec2(480, 600));
-    // gui->AddGuiWindow(mCosmeticEditorWindow);
+    mCosmeticsEditorWindow =
+        std::make_shared<CosmeticsEditorWindow>(CVAR_WINDOW("CosmeticsEditor"), "Cosmetics Editor", ImVec2(550, 520));
+    gui->AddGuiWindow(mCosmeticsEditorWindow);
 
     // mActorViewerWindow = std::make_shared<ActorViewerWindow>(CVAR_WINDOW("ActorViewer"), "Actor Viewer", ImVec2(520,
     // 600)); gui->AddGuiWindow(mActorViewerWindow);
@@ -191,13 +195,22 @@ void SetupGuiElements() {
     mRandoCheckTrackerWindow = std::make_shared<Rando::CheckTracker::CheckTrackerWindow>(
         CVAR_WINDOW("CheckTracker"), "Check Tracker", ImVec2(375, 460));
     gui->AddGuiWindow(mRandoCheckTrackerWindow);
-    mEggAimCrosshair = std::make_shared<EggAimCrosshairWindow>(CVAR_WINDOW("EggAimCrosshair"), "Egg Aim Crosshair");
-    gui->AddGuiWindow(mEggAimCrosshair);
-    mEggAimCrosshair->Show();
 
     mRandoCheckTrackerSettingsWindow = std::make_shared<Rando::CheckTracker::SettingsWindow>(
         CVAR_WINDOW("CheckTrackerSettings"), "Check Tracker Settings");
     gui->AddGuiWindow(mRandoCheckTrackerSettingsWindow);
+
+    mWorldTrackerWindow = std::make_shared<WorldTracker::WorldTrackerWindow>(CVAR_WINDOW("WorldTracker"),
+                                                                             "World Tracker", ImVec2(375, 460));
+    gui->AddGuiWindow(mWorldTrackerWindow);
+
+    mWorldTrackerSettingsWindow =
+        std::make_shared<WorldTracker::SettingsWindow>(CVAR_WINDOW("WorldTrackerSettings"), "World Tracker Settings");
+    gui->AddGuiWindow(mWorldTrackerSettingsWindow);
+
+    mCrosshairWindow = std::make_shared<Crosshair::Window>(CVAR_WINDOW("Crosshair"), "Crosshair");
+    gui->AddGuiWindow(mCrosshairWindow);
+    mCrosshairWindow->Show();
 
     mInputViewer = std::make_shared<InputViewer>(CVAR_WINDOW("InputViewer"), "Input Viewer");
     gui->AddGuiWindow(mInputViewer);
@@ -232,12 +245,14 @@ void Destroy() {
     mNotificationWindow = nullptr;
     mRandoCheckTrackerWindow = nullptr;
     mRandoCheckTrackerSettingsWindow = nullptr;
+    mWorldTrackerWindow = nullptr;
+    mWorldTrackerSettingsWindow = nullptr;
 
     // mHookDebuggerWindow = nullptr;
     mSaveEditorWindow = nullptr;
     mGameplayToolsWindow = nullptr;
     // mHudEditorWindow = nullptr;
-    // mCosmeticEditorWindow = nullptr;
+    mCosmeticsEditorWindow = nullptr;
     // mActorViewerWindow = nullptr;
     // mDLViewerWindow = nullptr;
     // mMessageViewerWindow = nullptr;
@@ -247,10 +262,29 @@ void Destroy() {
     mDisplayOverlayWindow = nullptr;
     mInputViewer = nullptr;
     mInputViewerSettings = nullptr;
-    mEggAimCrosshair = nullptr;
+    mCrosshairWindow = nullptr;
     mEventDebuggerWindow = nullptr;
     mOcclusionDebugWindow = nullptr;
     mAnchorRoomWindow = nullptr;
+}
+
+void SetAttached(bool attached) {
+    auto gui = Ship::Context::GetRawInstance()->GetWindow()->GetGui();
+    gui->SetMenu(attached ? mLighthouseMenu : nullptr);
+    const std::shared_ptr<Ship::GuiWindow> windows[] = {
+        mModalWindow,          mInputEditorWindow,          mGamepadMapperWindow,     mModMenuWindow,
+        mRomhackMenuWindow,    mSaveEditorWindow,           mGameplayToolsWindow,     mCosmeticsEditorWindow,
+        mDisplayOverlayWindow, mNotificationWindow,         mRandoCheckTrackerWindow, mRandoCheckTrackerSettingsWindow,
+        mWorldTrackerWindow,   mWorldTrackerSettingsWindow, mCrosshairWindow,         mInputViewer,
+        mInputViewerSettings,  mEventDebuggerWindow,        mOcclusionDebugWindow,    mAnchorRoomWindow,
+    };
+    for (const auto& window : windows) {
+        if (attached) {
+            gui->AddGuiWindow(window);
+        } else {
+            gui->RemoveGuiWindow(window);
+        }
+    }
 }
 
 void RegisterPopup(std::string title, std::string message, std::string button1, std::string button2,

@@ -4,9 +4,8 @@
 
 #include "core2/ch/snacker.h"
 
-extern f32 func_80309B24(f32[3]);
+extern f32 mapModel_getWaterSurfaceY(f32[3]);
 extern void func_80328FF0(Actor *, f32);
-extern void mapSpecificFlags_setN(s32, s32, s32);
 
 typedef enum {
     CH_SNACKER_OPA_0_APPEAR,
@@ -98,7 +97,7 @@ bool func_802E0DC0(f32 snacker_position[3]){
 
     player_getPosition(player_position);
     return (4000000.0f < ml_distanceSquared_vec3f(player_position, snacker_position))
-        || ( (snacker_position[1] - mapModel_getFloorY(snacker_position) < 70.0f) && (func_80309B24(snacker_position) - snacker_position[1] < 70.0f));
+        || ( (snacker_position[1] - mapModel_getFloorY(snacker_position) < 70.0f) && (mapModel_getWaterSurfaceY(snacker_position) - snacker_position[1] < 70.0f));
 }
 
 void func_802E0E88(Actor *this){
@@ -350,7 +349,7 @@ void chSnacker_spawn(void) {
         sp2C[1] -= 1000.0f;
 
 
-        if (func_80309B48(sp38, sp2C, sp20, 0xF800FF0F)) {
+        if (mapModel_intersectLine(sp38, sp2C, sp20, 0xF800FF0F)) {
             spawn_position[1] = sp2C[1] - 60.0f;
         }
         else{
@@ -373,10 +372,10 @@ void chSnacker_spawn(void) {
     }
     if (volatileFlag_get(VOLATILE_FLAG_C1_IN_FINAL_CHARACTER_PARADE) == 0) {
         func_8032BB88(snacker, 5000, 750);
-        core1_ce60_incOrDecCounter(false);
+        midichannel_incOrDecCounter(false);
         coMusicPlayer_playMusic(COMUSIC_34_SNACKER_DANGER, 0);
         comusic_8025AB44(COMUSIC_34_SNACKER_DANGER, 0x7FFF, 750);
-        core1_ce60_incOrDecCounter(true);
+        midichannel_incOrDecCounter(true);
     }
     s_chSnacker_spawnTimer = 0.0f;
     func_8032CA80(snacker, s_chSnacker_inRbb ? 15 : 9);

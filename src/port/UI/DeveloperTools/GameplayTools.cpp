@@ -1,19 +1,25 @@
 #include "GameplayTools.h"
 #include "CameraTools.h"
+#include "Warps.h"
 #include "port/Rando/Rando.h"
 #include "port/Rando/Logic/Logic.h"
 #include "port/Rando/CustomObject/CustomObject.h"
 #include "port/Enhancements/Events/Hooks/Events.h"
+#include "port/FrameHost.h"
 
 #include "port/UI/UIWidgets.hpp"
 #include "port/UI/Notification.h"
 #include "port/Patches/Patches.h"
 #include "port/ShipInit.hpp"
 #include "port/ShipUtils.h"
+#include "port/GameStatus.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <string>
+#include <vector>
 #include <imgui.h>
+#include <spdlog/fmt/fmt.h>
 #include <libultraship/libultraship.h>
 #include "port/UI/LighthouseGui.hpp"
 #include "port/UI/cvar_prefixes.h"
@@ -45,39 +51,15 @@ typedef struct {
     level_e levelId;
 } GameplayToolsMapData;
 
-int32_t playerPosition[3];
+static int32_t playerPosition[3];
 int32_t spawnOffset[3];
 int32_t spawnPosition[3];
-int32_t mapId = 0;
-int32_t exitId = 0;
 
 actor_e selectedJinjo = ACTOR_60_JINJO_BLUE;
 int32_t selectedSnsItem = SNS_ITEM_EGG_YELLOW;
 int32_t selectedJiggy = JIGGY_01_MM_JINJO;
 int32_t selectedHoneycomb = HONEYCOMB_1_MM_HILL;
 int32_t selectedToken = MUMBOTOKEN_01_MM_STUMP_NEAR_CONGA;
-
-const char* mapNames[] = {
-    "Mumbo's Mountain", "Treasure Trove Cove", "Clanker's Cavern", "Bubblegloop Swamp",   "Freezeezy Peak",
-    "Gobi's Valley",    "Click Clock Wood",    "Rusty Bucket Bay", "Mad Monster Mansion", "Spiral Mountain",
-    "Cutscene",         "Gruntilda's Lair",    "Boss Arena",
-};
-
-std::vector<int32_t> mapIdList = {
-    MAP_2_MM_MUMBOS_MOUNTAIN,
-    MAP_7_TTC_TREASURE_TROVE_COVE,
-    MAP_B_CC_CLANKERS_CAVERN,
-    MAP_D_BGS_BUBBLEGLOOP_SWAMP,
-    MAP_27_FP_FREEZEEZY_PEAK,
-    MAP_12_GV_GOBIS_VALLEY,
-    MAP_40_CCW_HUB,
-    MAP_31_RBB_RUSTY_BUCKET_BAY,
-    MAP_1B_MMM_MAD_MONSTER_MANSION,
-    MAP_1_SM_SPIRAL_MOUNTAIN,
-    MAP_7B_CS_INTRO_GL_DINGPOT_1,
-    MAP_69_GL_MM_LOBBY,
-    MAP_90_GL_BATTLEMENTS,
-};
 
 std::map<actor_e, std::tuple<const char*, UIWidgets::Colors, bool>> jinjoDataMap = {
     { ACTOR_5E_JINJO_YELLOW, { "Yellow Jinjo", UIWidgets::Colors::Yellow, false } },
@@ -94,24 +76,6 @@ std::map<StopNSwop_Item, std::tuple<const char*, UIWidgets::Colors, bool>> snsDa
     { SNS_ITEM_EGG_BLUE, { "SNS Blue Egg", UIWidgets::Colors::Blue, false } },
     { SNS_ITEM_EGG_PINK, { "SNS Pink Egg", UIWidgets::Colors::Pink, false } },
     { SNS_ITEM_EGG_CYAN, { "SNS Cyan Egg", UIWidgets::Colors::Cyan, false } },
-};
-
-std::map<map_e, std::pair<const char*, int32_t>> commonWarpMap = {
-    { MAP_1_SM_SPIRAL_MOUNTAIN, { "Outside Banjo's House", 0 } },
-    { MAP_2_MM_MUMBOS_MOUNTAIN, { "Mumbo's Mountain Warp Pad", 5 } },
-    { MAP_7_TTC_TREASURE_TROVE_COVE, { "Treasure Trove Cove Warp Pad", 4 } },
-    { MAP_B_CC_CLANKERS_CAVERN, { "Clanker's Cavern Warp Pad", 5 } },
-    { MAP_D_BGS_BUBBLEGLOOP_SWAMP, { "Bubblegloop Swamp Warp Pad", 2 } },
-    { MAP_27_FP_FREEZEEZY_PEAK, { "Freezeezy Peak Warp Pad", 1 } },
-    { MAP_12_GV_GOBIS_VALLEY, { "Gobi's Valley Warp Pad", 8 } },
-    { MAP_1B_MMM_MAD_MONSTER_MANSION, { "Mad Monster Mansion Warp Pad", 20 } },
-    { MAP_31_RBB_RUSTY_BUCKET_BAY, { "Rusty Bucket Bay Warp Pad", 16 } },
-    { MAP_40_CCW_HUB, { "Click Clock Wood Warp Pad", 7 } },
-    { MAP_43_CCW_SPRING, { "Click Clock Wood - Spring", 1 } },
-    { MAP_44_CCW_SUMMER, { "Click Clock Wood - Summer", 1 } },
-    { MAP_45_CCW_AUTUMN, { "Click Clock Wood - Autumn", 1 } },
-    { MAP_46_CCW_WINTER, { "Click Clock Wood - Winter", 1 } },
-    { MAP_8E_GL_FURNACE_FUN, { "Grunty's Furnace Fun", WARP_GL_FURNACE_FUN_2_ENTRANCE_PAD } },
 };
 
 // clang-format off
@@ -215,16 +179,15 @@ void GameplayTools_ObjectSpawner() {
     player_getPosition_s32(playerPosition);
     GameplayTools_SpawnPosition();
 
-    ImGui::SeparatorText("Player Position");
-    ImGui::Text("Map ID: %i", gsworld_getMap());
+    ImGui::SeparatorText("Object Spawn Position");
 
     if (ImGui::BeginTable("SpawnInfoTable", 3)) {
-        ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthFixed, 75.0f);
+        ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthFixed, 100.0f);
         ImGui::TableSetupColumn("PlayerPos", ImGuiTableColumnFlags_WidthFixed, 100.0f);
         ImGui::TableSetupColumn("Offset", ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableNextColumn();
 
-        ImGui::Text("Pos X: ");
+        ImGui::Text("Player Pos X: ");
         ImGui::TableNextColumn();
         ImGui::Text(std::to_string(playerPosition[0]).c_str());
         ImGui::TableNextColumn();
@@ -240,7 +203,7 @@ void GameplayTools_ObjectSpawner() {
         }
         ImGui::TableNextColumn();
 
-        ImGui::Text("Pos Y: ");
+        ImGui::Text("Player Pos Y: ");
         ImGui::TableNextColumn();
         ImGui::Text(std::to_string(playerPosition[1]).c_str());
         ImGui::TableNextColumn();
@@ -256,7 +219,7 @@ void GameplayTools_ObjectSpawner() {
         }
         ImGui::TableNextColumn();
 
-        ImGui::Text("Pos Z: ");
+        ImGui::Text("Player Pos Z: ");
         ImGui::TableNextColumn();
         ImGui::Text(std::to_string(playerPosition[2]).c_str());
         ImGui::TableNextColumn();
@@ -390,51 +353,22 @@ void GameplayTools_ObjectSpawner() {
     }
 }
 
-void DrawGameplayToolsWarpList() {
-    ImGui::SeparatorText("Custom Warp Selector");
-    if (ImGui::BeginChild("WarpChild")) {
-        ImGui::Text("Map Select ");
-        ImGui::SameLine();
-        UIWidgets::Combobox("##mapSelect", &mapId, mapNames,
-                            { .labelPosition = UIWidgets::LabelPositions::None, .color = THEME_COLOR });
-        UIWidgets::SliderInt("Exit ID", &exitId,
-                             {
-                                 .format = "Exit: %i",
-                                 .min = 0,
-                                 .max = 20,
-                                 .clamp = true,
-                                 .labelPosition = UIWidgets::LabelPositions::None,
-                                 .color = THEME_COLOR,
-                             });
-        if (UIWidgets::Button(mapNames[mapId], { .color = THEME_COLOR })) {
-            func_8031D04C((map_e)mapIdList[mapId], exitId);
-        }
-
-        ImGui::SeparatorText("Common Locations");
-        if (ImGui::BeginTable("CommonWarps", 2, ImGuiTableFlags_SizingStretchSame)) {
-            ImGui::TableNextColumn();
-            for (auto& [mapId, mapData] : commonWarpMap) {
-                if (UIWidgets::Button(mapData.first, { .color = THEME_COLOR })) {
-                    func_8031D04C(mapId, mapData.second);
-                }
-                ImGui::TableNextColumn();
-            }
-            ImGui::EndTable();
-        }
-        ImGui::EndChild();
-    }
-}
-
 void DrawGrantUnlocks() {
     if (UIWidgets::Button("Unlock Moves", { .color = THEME_COLOR })) {
-        ability_setAllLearned(-1);
-        ability_setAllUsed(-1);
+        Lighthouse::RunOnGameThread([] {
+            for (int i = ABILITY_0_BARGE; i <= ABILITY_12_WONDERWING; i++) {
+                ability_setLearned((ability_e)i, true);
+            }
+            ability_setAllUsed(-1);
+        });
     }
     if (UIWidgets::Button("Add All Consumables", { .color = THEME_COLOR })) {
-        item_set(ITEM_D_EGGS, 100);
-        item_set(ITEM_F_RED_FEATHER, 50);
-        item_set(ITEM_10_GOLD_FEATHER, 10);
-        item_set(ITEM_1C_MUMBO_TOKEN, 25);
+        Lighthouse::RunOnGameThread([] {
+            item_set(ITEM_D_EGGS, 100);
+            item_set(ITEM_F_RED_FEATHER, 50);
+            item_set(ITEM_10_GOLD_FEATHER, 10);
+            item_set(ITEM_1C_MUMBO_TOKEN, 25);
+        });
     }
 }
 
@@ -485,7 +419,8 @@ void DrawMonitoringTools() {
                     if (UIWidgets::Checkbox(
                             "state", &flagState,
                             UIWidgets::CheckboxOptions().LabelPosition(UIWidgets::LabelPositions::None))) {
-                        mapSpecificFlags_set(flagData.flagId, !mapSpecificFlags_get(flagData.flagId));
+                        Lighthouse::RunOnGameThread(
+                            [flag = flagData.flagId] { mapSpecificFlags_set(flag, !mapSpecificFlags_get(flag)); });
                     }
 
                     ImGui::TableNextColumn();
@@ -509,8 +444,8 @@ void GameplayTools_DrawTabBar() {
             GameplayTools_ObjectSpawner();
             ImGui::EndTabItem();
         }
-        if (ImGui::BeginTabItem("Warp")) {
-            DrawGameplayToolsWarpList();
+        if (ImGui::BeginTabItem("Warps")) {
+            DrawWarpsTab();
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Grant Unlocks")) {

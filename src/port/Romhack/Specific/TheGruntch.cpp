@@ -20,9 +20,9 @@ extern "C" {
 #include "core2/modelRender.h"
 #include "bk_time.h"
 
-extern ActorInfo chLargeCrocodile;
+extern ActorInfo gChLargeCrocodile;
 extern f32 D_8037C5B0[3];
-extern PfsManagerControllerData D_80281138[4];
+extern s32 sHeldFrames[MAXCONTROLLERS][JOY_BUTTON_COUNT];
 extern f32 cameraPosition[3];
 extern f32 cameraRotation[3];
 extern f32 D_8037D948[3];
@@ -32,7 +32,7 @@ extern f32 D_8037D9D4, D_8037D9D8, D_8037D9EC, D_8037D9F0;
 extern struct {
     u8 unk0;
     u8 level;
-} D_80383300;
+} sLevelState;
 
 typedef struct struct_1A_s {
     f32 delay;
@@ -44,6 +44,7 @@ typedef struct struct_1A_s {
 } PauseTotalsRow;
 extern PauseTotalsRow D_8036C520[4];
 extern s8 D_8036C5F4[];
+extern s32 D_803726F0[2];
 }
 
 void TooieJiggyDance_ForceEnable();
@@ -61,7 +62,9 @@ constexpr int kGruntchSuppressedDialogs[] = {
     ASSET_D9F_DIALOG_RED_FEATHER_MEET,
     ASSET_DA0_DIALOG_GOLD_FEATHER_MEET,
     ASSET_DA1_DIALOG_HONEYCOMB_MEET,
-    ASSET_DA2_DIALOG_EMPTY_HONEYCOMB_MEET,
+    0xF75,
+    0xF76,
+    0xF77,
 };
 
 // ---------------------------------------------------------- Proximity dialogs
@@ -182,7 +185,7 @@ static bool GruntchDialogGate1B() {
     }
     if (ProximityDialogs_IsShown(1, 0xC000) && player_isStable()) {
         f32 reArm[3] = { 0.0f, 720.0f, -360.0f };
-        if (ml_vec3f_distance(reArm, D_8037C5B0) < 170.0f && D_80281138[0].face_button[1] == 1) {
+        if (ml_vec3f_distance(reArm, D_8037C5B0) < 170.0f && sHeldFrames[0][JOY_BUTTON_B] == 1) {
             ProximityDialogs_ClearShown(1, 0xC000);
         }
     }
@@ -218,29 +221,17 @@ constexpr ProximityDialogMap kGruntchGameplayDialogs[] = {
 // ---------------------------------------------------------- Conditional actors
 static bool sConditionalActorsEnabled = false;
 
-extern "C" void romhack_RewriteActorSpawn(void* actorInfo, u32* flags) {
-    if (!sConditionalActorsEnabled || actorInfo == NULL || flags == NULL) {
-        return;
-    }
-    ActorInfo* info = (ActorInfo*)actorInfo;
-    switch (info->actorId) {
-        case 0x131:
-            *flags = (*flags & ~0x02u) | 0x40u;
-            break;
-        case 0xF:
-        case 0xF1:
-        case ACTOR_340_XMAS_TREE_ICE:
-            *flags |= 0x400u;
-            info->draw_distance = 0x8000;
-            break;
-        default:
-            break;
-    }
-}
+constexpr SpawnRewrite kGruntchSpawnRewrites[] = {
+    { ACTOR_F_CHIMPY, 0, 0x400, 0x8000 },
+    { ACTOR_F1_LEAF_BOAT, 0, 0x400, 0x8000 },
+    { ACTOR_340_XMAS_TREE_ICE, 0, 0x400, 0x8000 },
+    { ACTOR_131_GOBI_2, 0x02, 0x40, 0 },
+};
 
 // Draw the Giant Christmas Tree only if it's been "purchased"
 static void Gruntch_EnableConditionalActors() {
     sConditionalActorsEnabled = true;
+    HackShared_EnableSpawnRewrites(kGruntchSpawnRewrites);
     COND_VB_SHOULD(VB_XMAS_TREE_ICE_UPDATE, EVENT_PRIORITY_NORMAL, sConditionalActorsEnabled, {
         Actor* self = va_arg(args, Actor*);
         if (gsworld_getMap() == MAP_1B_MMM_MAD_MONSTER_MANSION && self != NULL && self->marker != NULL &&
@@ -261,10 +252,10 @@ static void Gruntch_EnableVoidOutRespawn() {
     REGISTER_VB_SHOULD(VB_VOID_OUT_RESPAWN_TRANSITION, EVENT_PRIORITY_NORMAL, {
         s32 map = va_arg(args, s32);
         s32 exit = va_arg(args, s32);
-        if (D_80383300.level == 1) {
+        if (sLevelState.level == 1) {
             map = MAP_28_MMM_EGG_ROOM;
             exit = 2;
-        } else if (D_80383300.level == 0xA) {
+        } else if (sLevelState.level == 0xA) {
             map = MAP_6C_GL_RED_CAULDRON_ROOM;
             exit = 5;
         }
@@ -304,6 +295,110 @@ constexpr WarpMusicGroup kGruntchMusicGroups[] = {
     { kMusicGroupVillage, ARRAY_COUNT(kMusicGroupVillage) },
 };
 
+// Music plays with every channel on these maps
+constexpr s32 kFullChanMaskMaps[] = { 0x07, 0x0C, 0x15, 0x1B, 0x22, 0x26, 0x28, 0x29, 0x2A, 0x2B,
+                                      0x2C, 0x2D, 0x2E, 0x36, 0x3C, 0x3D, 0x3F, 0x41, 0x60, 0x6A,
+                                      0x6B, 0x6C, 0x6F, 0x71, 0x72, 0x74, 0x75, 0x79, 0x8B };
+
+static bool Gruntch_OnFullChanMaskMap() {
+    const s32 map = gsworld_getMap();
+    for (const s32 listed : kFullChanMaskMaps) {
+        if (listed == map) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void Gruntch_EnableFullChanMask() {
+    REGISTER_VB_SHOULD(VB_MIDI_SET_CHAN_MASK, EVENT_PRIORITY_NORMAL, {
+        s32* mask = va_arg(args, s32*);
+        if (Gruntch_OnFullChanMaskMap()) {
+            *mask = 0xFFFF;
+        }
+        (void)should;
+    });
+
+    REGISTER_LISTENER(GameFrameUpdate, EVENT_PRIORITY_NORMAL, [](IEvent*) {
+        if (Gruntch_OnFullChanMaskMap()) {
+            musicSlot_stepToChannelMask(0, 0xFFFF, 3.0f);
+        }
+    });
+}
+
+static bool Gruntch_OnBookMap(s32 map) {
+    return map == MAP_37_RBB_CONTAINER_1 || map == MAP_38_RBB_CONTAINER_3 || map == MAP_3E_RBB_CONTAINER_2;
+}
+
+static void Gruntch_EnableHealthRules() {
+    // No health loss on maps 0x07 and 0x26
+    REGISTER_VB_SHOULD(VB_ITEM_ADJUST_BY_DIFF, EVENT_PRIORITY_NORMAL, {
+        const s32 item = va_arg(args, s32);
+        const s32 diff = va_arg(args, s32);
+        const s32 map = gsworld_getMap();
+        if (item == ITEM_14_HEALTH && diff < 0 &&
+            (map == MAP_7_TTC_TREASURE_TROVE_COVE || map == MAP_26_MMM_NAPPERS_ROOM)) {
+            *should = false;
+        }
+    });
+
+    REGISTER_VB_SHOULD(VB_HEALTH_HUD_SHOW, EVENT_PRIORITY_NORMAL, {
+        if (Gruntch_OnBookMap(va_arg(args, s32))) {
+            *should = false;
+        }
+    });
+}
+
+static void Gruntch_EnableActorTweaks() {
+    // Smashed presents don't explode
+    REGISTER_VB_SHOULD(VB_MM_HUT_DESPAWN_ON_SMASH, EVENT_PRIORITY_NORMAL, { *should = true; });
+
+    // The Gruntch stops snoring when the player is caught
+    REGISTER_VB_SHOULD(VB_NABNUT_SNORE_SFX, EVENT_PRIORITY_NORMAL, {
+        if (gsworld_getMap() == MAP_3C_RBB_KITCHEN && StealthNoise_CaughtThisMap()) {
+            *should = false;
+        }
+    });
+
+    REGISTER_VB_SHOULD(VB_NAPPER_WAKE_SFX, EVENT_PRIORITY_NORMAL, {
+        s32* sfx = va_arg(args, s32*);
+        *sfx = SFX_142_GRUNTY_LAUGH_3;
+        (void)should;
+    });
+}
+
+// Storybook opens on a black fade-in and closes on a black fade-out; the jiggy wipe does the rest
+constexpr TransitionPair kGruntchBookTransitions[] = {
+    { MAP_37_RBB_CONTAINER_1, 0, 0x5, 0xE }, { MAP_3E_RBB_CONTAINER_2, 0, 0x5, 0xE },
+    { MAP_38_RBB_CONTAINER_3, 0, 0x5, 0xE }, { 0, MAP_37_RBB_CONTAINER_1, 0xD, 0x6 },
+    { 0, MAP_3E_RBB_CONTAINER_2, 0xD, 0x6 }, { 0, MAP_38_RBB_CONTAINER_3, 0xD, 0x6 },
+};
+
+static void Gruntch_EnableCosmetics() {
+    HackShared_EnableTransitionPairs(kGruntchBookTransitions);
+
+    // Red sparkles in place of yellow
+    D_803726F0[0] = 5;
+
+    REGISTER_VB_SHOULD(VB_PROP_SPRITE_SCALE, EVENT_PRIORITY_NORMAL, {
+        const s32 sprite = va_arg(args, s32);
+        f32* scale = va_arg(args, f32*);
+        if (sprite == 0x15) {
+            scale[0] = scale[1] = scale[2] = scale[0] / 2.5f;
+        }
+        (void)should;
+    });
+
+    // Play a sound when pressing this switch
+    REGISTER_VB_SHOULD(VB_MM_WITCH_SWITCH_JIGGY_FLUSH, EVENT_PRIORITY_NORMAL, { *should = true; });
+
+    REGISTER_VB_SHOULD(VB_CROC_MAX_WALK_VELOCITY, EVENT_PRIORITY_NORMAL, {
+        f32* velocity = va_arg(args, f32*);
+        *velocity = 450.0f;
+        (void)should;
+    });
+}
+
 // Banjo & Kazooie don't rebound when hitting windows with Rat-A-Tap Rap
 static void Gruntch_EnableWindowRapNoRebound() {
     REGISTER_VB_SHOULD(VB_BUMP_REBOUNDS_PLAYER, EVENT_PRIORITY_NORMAL, {
@@ -316,7 +411,7 @@ static void Gruntch_EnableWindowRapNoRebound() {
 
 // ------------------------------------------------------- Jiggy consolidation
 constexpr int kJiggyToMM[] = { 0x14, 0x20, 0x2E, 0x4A };
-constexpr int kJiggyToMMM[] = { 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3A, 0x3B, 0x3C, 0x3E };
+constexpr int kJiggyToMMM[] = { 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3A, 0x3B, 0x3C, 0x3E, 0x56 };
 constexpr JiggyRelocation kGruntchJiggyRelocations[] = {
     { LEVEL_1_MUMBOS_MOUNTAIN, kJiggyToMM, ARRAY_COUNT(kJiggyToMM) },
     { LEVEL_A_MAD_MONSTER_MANSION, kJiggyToMMM, ARRAY_COUNT(kJiggyToMMM) },
@@ -334,6 +429,7 @@ static void Gruntch_EnablePauseTotalsLayout() {
 
 static void Gruntch_EnableJiggyTally() {
     HackShared_EnableJiggyRelocation(kGruntchJiggyRelocations);
+    HackShared_SetJiggyLevelCap(10);
     port_overrideRomhackJiggiesPerWorld(10);
 
     // Hide Mt Grumpit's notes and jiggies
@@ -364,7 +460,8 @@ static void Gruntch_EnableMumboTokenDialogs() {
             gsworld_getMap() != MAP_48_FP_MUMBOS_SKULL || !jiggyscore_isCollected((enum jiggy_e)3)) {
             return;
         }
-        func_80324E38(0.0f, 3);
+        // Release the player, as the skipped dialog would have
+        func_80324E38(0.0f, 0);
         *should = true;
     });
 }
@@ -562,10 +659,10 @@ static bool Gruntch_HeadHasNoticedPlayer() {
 }
 
 static void Gruntch_EnableHeadLook() {
-    sHead.savedUpdate = chLargeCrocodile.update_func;
-    sHead.savedDraw = chLargeCrocodile.draw_func;
-    chLargeCrocodile.update_func = HeadLook_update;
-    chLargeCrocodile.draw_func = HeadLook_draw;
+    sHead.savedUpdate = gChLargeCrocodile.update_func;
+    sHead.savedDraw = gChLargeCrocodile.draw_func;
+    gChLargeCrocodile.update_func = HeadLook_update;
+    gChLargeCrocodile.draw_func = HeadLook_draw;
 
     REGISTER_LISTENER(OnMapLoad, EVENT_PRIORITY_NORMAL, [](IEvent*) {
         sHead.initialised = false;
@@ -584,10 +681,20 @@ constexpr StealthNoiseConfig kGruntchStealth = {
     warp_rbbExitBoomBoxContainer, 0x13,
 };
 
+// These maps shrink the podium, so its standing check is adjusted to compensate
+// constexpr PodiumFloor kGruntchPodiumFloors[] = {
+//     { MAP_2E_MMM_HONEYCOMB_ROOM, -112.0f },
+//     { MAP_3D_RBB_NAVIGATION_ROOM, -352.0f },
+// };
+
+void CluckerCutscene_ForceSkip();
+
 // ------------------------------------------------------- Patch registration
 void RegisterGruntchPatches() {
     TooieJiggyDance_ForceEnable();
     Storybook_Enable(kGruntchStorybook);
+    // Book pages show again for each new game or loaded save
+    REGISTER_LISTENER(OnSaveLoad, EVENT_PRIORITY_NORMAL, [](IEvent*) { ProximityDialogs_ClearShown(0, 0xFFFF); });
     ProximityDialogs_Enable(kGruntchGameplayDialogs);
     StealthNoise_Enable(kGruntchStealth);
     Gruntch_EnableActGate();
@@ -597,10 +704,18 @@ void RegisterGruntchPatches() {
     Gruntch_EnableVoidOutRespawn();
     Gruntch_EnableEggNoise();
     HackShared_EnableWarpMusicGroups(kGruntchMusicGroups);
+    Gruntch_EnableFullChanMask();
+    Gruntch_EnableHealthRules();
+    Gruntch_EnableActorTweaks();
+    Gruntch_EnableCosmetics();
     Gruntch_EnableWindowRapNoRebound();
     Gruntch_EnablePauseTotalsLayout();
     Gruntch_EnableJiggyTally();
     HackShared_EnableDialogSuppression(kGruntchSuppressedDialogs);
     Gruntch_EnableMumboTokenDialogs();
     HackShared_EnableForceAbilitiesUsed(kAllUsedAbilities);
+    HackShared_EnableFileSelectGameOver();
+    // HackShared_EnablePodiumCheck(kGruntchPodiumFloors);
+    HackShared_EnablePuzzleDepositClamp();
+    CluckerCutscene_ForceSkip();
 }

@@ -11,6 +11,7 @@
 #include "port/Localization/Language.h"
 #include "port/Save/SaveConverter.h"
 #include "UIWidgets.hpp"
+#include <fast/Fast3dWindow.h>
 #include <spdlog/fmt/fmt.h>
 
 #include "variables.h"
@@ -265,9 +266,7 @@ void LighthouseMenu::AddMenuSettings() {
             if (!opts->comboMap.empty() && opts->comboMap.find(cur) == opts->comboMap.end()) {
                 CVarSetInteger(CVAR_SETTING("DialogLanguage"), opts->comboMap.begin()->first);
             }
-            if (mLighthouseMenu->disabledMap.at(DISABLE_FOR_ROMHACK).active)
-                info.activeDisables.push_back(DISABLE_FOR_ROMHACK);
-            else if (mLighthouseMenu->disabledMap.at(DISABLE_FOR_SINGLE_LANGUAGE).active)
+            if (mLighthouseMenu->disabledMap.at(DISABLE_FOR_SINGLE_LANGUAGE).active)
                 info.activeDisables.push_back(DISABLE_FOR_SINGLE_LANGUAGE);
             if (mLighthouseMenu->disabledMap.at(DISABLE_DURING_PARADE).active)
                 info.activeDisables.push_back(DISABLE_DURING_PARADE);
@@ -288,10 +287,6 @@ void LighthouseMenu::AddMenuSettings() {
                      .ComponentAlignment(ComponentAlignments::Right));
     AddWidget(path, "Add Language Pack from ROM", WIDGET_BUTTON)
         .RaceDisable(false)
-        .PreFunc([](WidgetInfo& info) {
-            if (mLighthouseMenu->disabledMap.at(DISABLE_FOR_ROMHACK).active)
-                info.activeDisables.push_back(DISABLE_FOR_ROMHACK);
-        })
         .Callback([](WidgetInfo& info) {
             LighthouseGui::mModalWindow->RegisterPopup(
                 "Add Language Pack from ROM", "Select any Banjo-Kazooie ROM whose language you want to add.\n",
@@ -321,9 +316,7 @@ void LighthouseMenu::AddMenuSettings() {
                      .DefaultIndex(1)
                      .ComponentAlignment(ComponentAlignments::Right)
                      .LabelPosition(LabelPositions::Far))
-        // Apply the new scale immediately (2ship wires the same callback); without it the CVar
-        // changes but nothing calls ScaleImGui() until the next launch.
-        .Callback([](WidgetInfo& info) { GameEngine::ScaleImGui(); });
+        .Callback([](WidgetInfo& info) { GameEngine::Instance->ScaleImGui(); });
 
     // Audio Settings
     path.sidebarName = "Audio";
@@ -334,37 +327,14 @@ void LighthouseMenu::AddMenuSettings() {
         .CVar(CVAR_SETTING("Volume.Master"))
         .RaceDisable(false)
         .Options(IntSliderOptions().Min(0).Max(100).DefaultValue(40).ShowButtons(true).Format("%d%%"));
-    // AddWidget(path, "Main Music Volume: %d %%", WIDGET_CVAR_SLIDER_INT)
-    //     .CVar(CVAR_SETTING("Volume.MainMusic"))
-    //     .RaceDisable(false)
-    //     .Options(IntSliderOptions().Min(0).Max(100).DefaultValue(100).ShowButtons(true).Format(""));
-    //.Callback([](WidgetInfo& info) {
-    //     Audio_SetGameVolume(SEQ_PLAYER_BGM_MAIN,
-    //                         ((float)CVarGetInteger(CVAR_SETTING("Volume.MainMusic"), 100) / 100.0f));
-    // });
-    // AddWidget(path, "Sub Music Volume: %d %%", WIDGET_CVAR_SLIDER_INT)
-    //     .CVar(CVAR_SETTING("Volume.SubMusic"))
-    //     .RaceDisable(false)
-    //     .Options(IntSliderOptions().Min(0).Max(100).DefaultValue(100).ShowButtons(true).Format(""));
-    //.Callback([](WidgetInfo& info) {
-    //     Audio_SetGameVolume(SEQ_PLAYER_BGM_SUB,
-    //                         ((float)CVarGetInteger(CVAR_SETTING("Volume.SubMusic"), 100) / 100.0f));
-    // });
-    // AddWidget(path, "Fanfare Volume: %d %%", WIDGET_CVAR_SLIDER_INT)
-    //     .CVar(CVAR_SETTING("Volume.Fanfare"))
-    //     .RaceDisable(false)
-    //     .Options(IntSliderOptions().Min(0).Max(100).DefaultValue(100).ShowButtons(true).Format(""));
-    //.Callback([](WidgetInfo& info) {
-    //     Audio_SetGameVolume(SEQ_PLAYER_FANFARE,
-    //                         ((float)CVarGetInteger(CVAR_SETTING("Volume.Fanfare"), 100) / 100.0f));
-    // });
-    // AddWidget(path, "Sound Effects Volume: %d %%", WIDGET_CVAR_SLIDER_INT)
-    //     .CVar(CVAR_SETTING("Volume.SFX"))
-    //     .RaceDisable(false)
-    //     .Options(IntSliderOptions().Min(0).Max(100).DefaultValue(100).ShowButtons(true).Format(""));
-    //.Callback([](WidgetInfo& info) {
-    //     Audio_SetGameVolume(SEQ_PLAYER_SFX, ((float)CVarGetInteger(CVAR_SETTING("Volume.SFX"), 100) / 100.0f));
-    // });
+    AddWidget(path, "Music Volume", WIDGET_CVAR_SLIDER_INT)
+        .CVar(CVAR_SETTING("Volume.Music"))
+        .RaceDisable(false)
+        .Options(IntSliderOptions().Min(0).Max(100).DefaultValue(100).ShowButtons(true).Format("%d%%"));
+    AddWidget(path, "Sound Effects Volume", WIDGET_CVAR_SLIDER_INT)
+        .CVar(CVAR_SETTING("Volume.SFX"))
+        .RaceDisable(false)
+        .Options(IntSliderOptions().Min(0).Max(100).DefaultValue(100).ShowButtons(true).Format("%d%%"));
     AddWidget(path, "Audio API (Needs reload)", WIDGET_AUDIO_BACKEND).RaceDisable(false);
 
     // Graphics Settings
@@ -562,9 +532,28 @@ void LighthouseMenu::AddMenuSettings() {
         .Options(CheckboxOptions()
                      .Tooltip("Allows multiple windows to be opened at once. Requires a reload to take effect.")
                      .DefaultValue(true));
-    AddWidget(path, "Texture Filter (Needs reload)", WIDGET_CVAR_COMBOBOX)
+    AddWidget(path, "Enable Mipmaps", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_SETTING("Mipmaps"))
+        .RaceDisable(false)
+        .Callback([](WidgetInfo& info) {
+            auto fastWnd = dynamic_pointer_cast<Fast::Fast3dWindow>(Ship::Context::GetRawInstance()->GetWindow());
+            if (auto interpreter = fastWnd ? fastWnd->GetInterpreterWeak().lock() : nullptr) {
+                interpreter->SetMipmapsEnabled(CVarGetInteger(CVAR_SETTING("Mipmaps"), 1));
+            }
+        })
+        .Options(CheckboxOptions()
+                     .Tooltip("Draws distant textures at lower detail so they don't shimmer. Off draws every "
+                              "texture at full size.")
+                     .DefaultValue(true));
+    AddWidget(path, "Texture Filter", WIDGET_CVAR_COMBOBOX)
         .CVar(CVAR_TEXTURE_FILTER)
         .RaceDisable(false)
+        .Callback([](WidgetInfo& info) {
+            if (auto fastWnd = dynamic_pointer_cast<Fast::Fast3dWindow>(Ship::Context::GetRawInstance()->GetWindow())) {
+                fastWnd->SetTextureFilter(
+                    (Fast::FilteringMode)CVarGetInteger(CVAR_TEXTURE_FILTER, Fast::FILTER_THREE_POINT));
+            }
+        })
         .Options(ComboboxOptions().Tooltip("Sets the applied Texture Filtering.").ComboMap(textureFilteringMap));
 
     path.column = SECTION_COLUMN_2;

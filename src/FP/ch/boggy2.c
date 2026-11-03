@@ -33,18 +33,18 @@ void func_803896FC(Actor *this);
 /* .data */
 ActorAnimationInfo D_80391C80[] = {
     {0x000, 0.0f},
-    {0x150, 0.6f},
-    {0x150, 0.6f},
-    {0x150, 0.6f},
-    {0x150, 0.6f},
-    {0x179, 2.3f},
-    {0x17A, 1.3f},
-    {0x17B, 2.0f},
-    {0x150, 1.0f},
-    {0x1AA, 4.3f},
-    {0x1AB, 4.3f},
-    {0x150, 1.0f},
-    {0x150, 0.6f}
+    {ASSET_150_ANIM_BOGGY_SLED, 0.6f},
+    {ASSET_150_ANIM_BOGGY_SLED, 0.6f},
+    {ASSET_150_ANIM_BOGGY_SLED, 0.6f},
+    {ASSET_150_ANIM_BOGGY_SLED, 0.6f},
+    {ASSET_179_ANIM_BOGGY_SLED_HURRY_UP, 2.3f},
+    {ASSET_17A_ANIM_BOGGY_SLED_LOOK_BACK, 1.3f},
+    {ASSET_17B_ANIM_BOGGY_unk, 2.0f},
+    {ASSET_150_ANIM_BOGGY_SLED, 1.0f},
+    {ASSET_1AA_ANIM_BOGGY_RACE_WIN, 4.3f},
+    {ASSET_1AB_ANIM_BOGGY_RACE_LOSE, 4.3f},
+    {ASSET_150_ANIM_BOGGY_SLED, 1.0f},
+    {ASSET_150_ANIM_BOGGY_SLED, 0.6f}
 };
 
 ActorInfo gChBoggySled = { MARKER_97_BOGGY_2, ACTOR_C8_BOGGY_2, ASSET_38A_MODEL_BOGGY_1, 
@@ -204,7 +204,7 @@ void func_80388D70(ActorMarker *caller, enum asset_e text_id, s32 arg2){
         case VER_SELECT(ASSET_C29_DIALOG_BOGGY_SLED_BEAR_SECOND_START, 0x9A3, 0, 0)://L80388DC4
             coMusicPlayer_playMusic(COMUSIC_3A_FP_BOGGY_RACE, 25000);
             func_8025A58C(0, 4000);
-            core1_ce60_incOrDecCounter(false);
+            midichannel_incOrDecCounter(false);
             func_802BE720();
             local->unk0 = partEmitMgr_newEmitter(16);
             local->unk4 = partEmitMgr_newEmitter(16);

@@ -81,40 +81,41 @@ extern ActorInfo D_80394980;
 extern ActorInfo D_80394C28;
 extern ActorInfo D_80394C4C;
 extern ActorInfo D_80394C70;
-extern ActorInfo D_80394D20;
+extern ActorInfo gChActorFurnaceFunPickPrice;
 extern ActorInfo D_80394CF0;
 extern ActorInfo D_80394C94;
 
 /* .data */
-ActorAnimationInfo D_80392CB0[] = {
-    {    0,   0.0f}, 
-    {    0,   0.0f},
-    { 0xD4,   0.15f}, 
-    { 0xD5,   0.5f},
-    {    0,   0.0f}, 
-    {    0,   0.0f},
-    { 0xD4,   0.15f}, 
-    { 0xD5,   0.5f},
-    { 0xD5, 1e+08f}, 
-    {0x1E3,   0.73},
-    {0x1E3, 1e+08f}, 
-    {0x1F0,   1.0f},
-    {0x1F1,   0.7f}, 
-    {0x1F1, 1e+08f},
-    {0x1F2,   1.0f}, 
-    {0x1F3,   0.4f},
-    {0x1F3, 1e+08f}, 
-    {    0,   0.0f},
-    {0x218, 1e+08f}, 
-    {0x218,   1.0f},
-    {0x218, 1e+08f}, 
-    {0x235, 1e+08f},
-    {0x235, 1e+08f}, 
-    {0x235,   1.0f},
-    {0x235, 1e+08f}, 
-    {0x271, 1e+08f},
-    {0x271,   3.0f}, 
-    {0x271, 1e+08f}
+ActorAnimationInfo D_80392CB0[] =
+{
+    { 0,                                0.0f},
+    { 0,                                0.0f},
+    { ASSET_D4_ANIM_SWITCH_DOWN,       0.15f},
+    { ASSET_D5_ANIM_SWITCH_UP,          0.5f},
+    { 0,                                0.0f},
+    { 0,                                0.0f},
+    { ASSET_D4_ANIM_SWITCH_DOWN,       0.15f},
+    { ASSET_D5_ANIM_SWITCH_UP,          0.5f},
+    { ASSET_D5_ANIM_SWITCH_UP,     100000000},
+    { ASSET_1E3_ANIM_UNKNOWN,           0.73},
+    { ASSET_1E3_ANIM_UNKNOWN,      100000000},
+    { ASSET_1F0_ANIM_UNKNOWN,           1.0f},
+    { ASSET_1F1_ANIM_UNKNOWN,           0.7f}, 
+    { ASSET_1F1_ANIM_UNKNOWN,      100000000},
+    { ASSET_1F2_ANIM_UNKNOWN,           1.0f}, 
+    { ASSET_1F3_ANIM_UNKNOWN,           0.4f},
+    { ASSET_1F3_ANIM_UNKNOWN,      100000000},
+    { 0,                                0.0f},
+    { ASSET_218_ANIM_unk,          100000000},
+    { ASSET_218_ANIM_unk,               1.0f},
+    { ASSET_218_ANIM_unk,          100000000},
+    { ASSET_235_ANIM_unk,          100000000},
+    { ASSET_235_ANIM_unk,          100000000},
+    { ASSET_235_ANIM_unk,               1.0f},
+    { ASSET_235_ANIM_unk,          100000000},
+    { ASSET_271_ANIM_unk,          100000000},
+    { ASSET_271_ANIM_unk,               3.0f},
+    { ASSET_271_ANIM_unk,          100000000}
 };
 ActorInfo lair_D_80392D90 = {
     MARKER_270_TWO_ICE_POLES_NEAR_CHEATO_3, ACTOR_2D8_TWO_ICE_POLES_NEAR_CHEATO_3, ASSET_3B2_MODEL_TWO_ICE_POLES_NEAR_CHEATO_3,
@@ -688,7 +689,7 @@ void func_803867A8(Actor *this) {
         this->unk158[0] = func_803866D8(0);
         this->unk158[1] = func_803866D8(1);
         if (volatileFlag_get(VOLATILE_FLAG_86_SANDCASTLE_SHOCKSPRING_JUMP_UNLOCKED)) {
-            ability_unlock(ABILITY_D_SHOCK_JUMP);
+            player_unlockAbility(ABILITY_D_SHOCK_JUMP);
             fileProgressFlag_set(FILEPROG_C6_LAIR_JUMP_PAD_SWITCH_PRESSED, true);
             fileProgressFlag_set(FILEPROG_C7_LAIR_JUMP_PAD_ACTIVE, true);
         }
@@ -698,13 +699,19 @@ void func_803867A8(Actor *this) {
             if (this->unk38_31 != 0) {
                 this->unk38_31--;
             } else {
-                phi_v0 = this->alpha_124_19 + 3;
+                // [port] This actor advances per logic tick, and GV Lobby's framerate
+                // actor made that 20 ticks/s on N64. RegisterGVLobbyFramerate_Init
+                // lifts the room to 30, so scale by the current VI divisor (3 = 20 ticks/s)
+                // to keep the pad's original real-time rate.
+//              phi_v0 = this->alpha_124_19 + 3;
+                phi_v0 = this->alpha_124_19 + viMgr_func_8024BFA0();
                 if(phi_v0 >= 0x100){
                     phi_v0 = 0xFF;
                 }
                 this->alpha_124_19 = phi_v0;
                 if (this->alpha_124_19 < 0xAA){
-                    this->velocity[0] += 1.0f;
+//                  this->velocity[0] += 1.0f;
+                    this->velocity[0] += viMgr_func_8024BFA0() / 3.0f;
                     if((this->velocity[0] < 0.0f) || (this->velocity[0] > 19.0f)) {
                         this->velocity[0] = 0.0f;
                         gcsfx_playWithPitch(SFX_3F6_RUBBING, 0.5f, this->alpha_124_19*0x25 + 0x3840);
@@ -712,14 +719,16 @@ void func_803867A8(Actor *this) {
                 }
             }
         } else {
-            this->velocity[0] += 1.0f;
+//          this->velocity[0] += 1.0f;
+            this->velocity[0] += viMgr_func_8024BFA0() / 3.0f;
             if ((this->velocity[0] < 0.0f) || (this->velocity[0] > 19.0f)) {
                 this->velocity[0] = 0.0f;
                 sfx_playFadeShorthandDefault(SFX_3F6_RUBBING, 0.5f, 24000, this->position, 100, 2300);
 
             }
         }
-        this->lifetime_value += 2.5;
+//      this->lifetime_value += 2.5;
+        this->lifetime_value += 2.5 * (viMgr_func_8024BFA0() / 3.0f);
         while(this->lifetime_value >= 360.0f){ this->lifetime_value -= 360.0f;}
 
         this->position_y = this->unk1C[1];
@@ -789,7 +798,7 @@ void func_80386D78(Actor *this) {
     if (!this->volatile_initialized) {
         this->volatile_initialized = true;
         if (volatileFlag_get(VOLATILE_FLAG_8A_SANDCASTLE_FLIGHT_UNLOCKED)) {
-            ability_unlock(ABILITY_9_FLIGHT);
+            player_unlockAbility(ABILITY_9_FLIGHT);
             mapSpecificFlags_set(0, true);
             this->lifetime_value = 0.0f;
             this->position[1] = this->unk1C[1];
@@ -930,8 +939,14 @@ void func_803875F0(Actor * this)
     if (!this->volatile_initialized)
     {
         // [port] Anchor: a teammate's press delivers map flag 0 and FILEPROG_1E in the same
-        // packet drain, so check the switch flag first -- while we're here to watch, the rise
-        // animation should win over the already-open catch-up despawn.
+        // packet drain; while we're here to watch, the rise wins over the despawn.
+//      if (fileProgressFlag_get(FILEPROG_1E_LAIR_GRATE_TO_BGS_PUZZLE_OPEN))
+        if (fileProgressFlag_get(FILEPROG_1E_LAIR_GRATE_TO_BGS_PUZZLE_OPEN) && !port_mapFlag_wasSetRemotely(0))
+        {
+            marker_despawn(this->marker);
+            return;
+        }
+
         if (mapSpecificFlags_get(0))
         {
             this->unk1C_y = this->position_y;
@@ -942,11 +957,6 @@ void func_803875F0(Actor * this)
             fileProgressFlag_set(FILEPROG_1E_LAIR_GRATE_TO_BGS_PUZZLE_OPEN, true);
             this->volatile_initialized = true;
             this->unk38_31 = 0x0C;
-        }
-        else if (fileProgressFlag_get(FILEPROG_1E_LAIR_GRATE_TO_BGS_PUZZLE_OPEN))
-        {
-            marker_despawn(this->marker);
-            return;
         }
     }
     else
@@ -1017,14 +1027,13 @@ void func_80387730(Actor *this) {
     // Anchor: unk1C[0] set by port_notedoor_remoteOpen = a teammate opened this door.
     forceOpen = (this->unk1C[0] != 0.0f);
     if (forceOpen ||
-        (!fileProgressFlag_get(this->actorTypeSpecificField + FILEPROG_39_CCW_OPEN) && ability_isUnlocked(ABILITY_13_1ST_NOTEDOOR))) {
+        (!fileProgressFlag_get(this->actorTypeSpecificField + FILEPROG_39_CCW_OPEN) && player_isAbilityUnlocked(ABILITY_13_1ST_NOTEDOOR))) {
         player_getPosition(spAC);
         if (!forceOpen && (ml_vec3f_distance(spAC, this->position) < 500.0f) && (gcdialog_getCurrentTextId() != 0xF64)) {
             code_73640_printItemCount(0xC);
         }
         doorIdx = this->actorTypeSpecificField - 1;
-        noteThreshold = port_getRomhackNoteDoor(doorIdx);
-        if (noteThreshold < 0) { noteThreshold = D_8039347C[doorIdx]; }
+        noteThreshold = port_getNoteDoorCost(doorIdx);
         if (forceOpen || itemscore_noteScores_getTotal() >= noteThreshold) {
             if (this->marker->unk14_21) {
                 func_8032BC60(this, 5, sp90);
@@ -1206,9 +1215,7 @@ Actor *func_80387DA8(ActorMarker *marker, Gfx **gfx, Mtx **mtx, Vtx **vtx)
      * Hides all note door graphics that don't match this note door's index
      * e.g. for the 50 note door, hides 180, 260, etc.
      */
-    // [port] Romhack gate: a listener may blank this door's baked number (the digits
-    // are a fixed mesh, so an overridden threshold would show the wrong one).
-    bool showNumber = EventSystem_Should(VB_NOTEDOOR_DRAW_NUMBER, true, actor->noteDoorIdx);
+    bool showNumber = EventSystem_Should(VB_NOTEDOOR_DRAW_NUMBER, true, actor->noteDoorIdx, marker);
     for (i = 0; i != NUM_NOTE_DOORS; i++)
         modelRender_setAppendageVisibility(i + 1, showNumber && (actor->noteDoorIdx + 1 == i + 2));
 
@@ -1386,7 +1393,10 @@ void func_803882B0(Actor *this)
     if (this->lifetime_value == 0 && this->pitch > 42.f)
     {
         this->lifetime_value = 1.f;
-        coMusicPlayer_playMusic(COMUSIC_3D_JIGGY_SPAWN, 0x7FFF);
+        s32 track = COMUSIC_3D_JIGGY_SPAWN;
+        EventSystem_Should(VB_JIGGY_SPAWN_JINGLE, true, JIGGY_38_LAIR_FP_WITCH_SWITCH, &track);
+//      coMusicPlayer_playMusic(COMUSIC_3D_JIGGY_SPAWN, 0x7FFF);
+        coMusicPlayer_playMusic(track, 0x7FFF);
     }
 
     if (this->pitch > 90.f)
@@ -2109,7 +2119,10 @@ void func_80389934(Actor *this)
                 subaddie_set_state_forward(this, 0x17);
                 actor_playAnimationOnce(this);
                 FUNC_8030E624(SFX_3F6_RUBBING, 0.6f, 32000);
-                coMusicPlayer_playMusic(COMUSIC_3D_JIGGY_SPAWN, 0x7FFF);
+                s32 track = COMUSIC_3D_JIGGY_SPAWN;
+                EventSystem_Should(VB_JIGGY_SPAWN_JINGLE, true, JIGGY_3A_LAIR_GV_WITCH_SWITCH, &track);
+//              coMusicPlayer_playMusic(COMUSIC_3D_JIGGY_SPAWN, 0x7FFF);
+                coMusicPlayer_playMusic(track, 0x7FFF);
             }
 
             break;
@@ -2134,7 +2147,7 @@ f32 func_80389AAC(Actor *this, f32 a1)
 {
     // defs
     f32   randf2(f32, f32);
-    BKCollisionTriangle *func_80309B48(f32 *, f32 *, f32 *, u32);
+    BKCollisionTriangle *mapModel_intersectLine(f32 *, f32 *, f32 *, u32);
 
     f32 vec3[3]; // $sp + 54
     f32 vec2[3]; // $sp + 48
@@ -2158,7 +2171,7 @@ f32 func_80389AAC(Actor *this, f32 a1)
 
     vec1[1] = this->position_y - 400;
 
-    if (this->unk1C[1] < 0 && func_80309B48(vec3, vec1, vec2, 0) && this->position_y <= vec1[1])
+    if (this->unk1C[1] < 0 && mapModel_intersectLine(vec3, vec1, vec2, 0) && this->position_y <= vec1[1])
     {
         this->position_y = vec1[1] + 6;
 
@@ -2397,7 +2410,7 @@ void lair_func_8038A0C4(void)
     spawnableActorList_add(&D_80394C28, actor_new, ACTOR_FLAG_UNKNOWN_10);
     spawnableActorList_add(&D_80394C4C, actor_new, ACTOR_FLAG_UNKNOWN_10);
     spawnableActorList_add(&D_80394C70, actor_new, ACTOR_FLAG_UNKNOWN_10);
-    spawnableActorList_add(&D_80394D20, actor_new, ACTOR_FLAG_NONE);
+    spawnableActorList_add(&gChActorFurnaceFunPickPrice, actor_new, ACTOR_FLAG_NONE);
     spawnableActorList_add(&D_80394CF0, actor_new, ACTOR_FLAG_UNKNOWN_3 | ACTOR_FLAG_UNKNOWN_8 | ACTOR_FLAG_UNKNOWN_10 | ACTOR_FLAG_UNKNOWN_19);
     spawnableActorList_add(&D_80394C94, actor_new, ACTOR_FLAG_UNKNOWN_8 | ACTOR_FLAG_UNKNOWN_10);
     spawnableActorList_add(&D_80393354, actor_new, ACTOR_FLAG_UNKNOWN_1 | ACTOR_FLAG_UNKNOWN_9 | ACTOR_FLAG_UNKNOWN_10 | ACTOR_FLAG_UNKNOWN_15);

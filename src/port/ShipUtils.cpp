@@ -2,6 +2,8 @@
 #include "Save/SaveManager.h"
 #include "Save/Types.h"
 #include "Engine.h"
+#include "GameStatus.h"
+#include "port/FrameHost.h"
 #include "port/Romhack/RomhackConfig.h"
 #include <chrono>
 #include <cstdarg>
@@ -12,6 +14,7 @@
 #include "UI/cvar_prefixes.h"
 #include "UI/enhancementTypes.h"
 #include "fast/Fast3dGui.h"
+#include "include/functions.h"
 #ifdef _WIN32
 #include <windows.h>
 #endif
@@ -26,12 +29,6 @@ namespace fs = std::filesystem;
 
 int32_t gSelectedFileNum = 0;
 
-std::vector<std::string> worldNameList = {
-    "Mumbo's Mountain", "Treasure Trove Cove", "Clanker's Cavern", "Bubblegloop Swamp",
-    "Freezeezy Peak",   "Gruntilda's Lair",    "Gobi's Valley",    "Click Clock Wood",
-    "Rusty Bucket Bay", "Mad Monster Mansion", "Spiral Mountain",
-};
-
 std::vector<std::string> abilityNameList = { "Beak Barge", "Beak Bomb",   "Beak Buster",  "Camera Control",
                                              "Claw Swipe", "Climb",       "Eggs",         "Feathery Flap",
                                              "Flap Flip",  "Flight",      "Jump Higher",  "Ratatat Rap",
@@ -43,6 +40,12 @@ static void bk_log_vfmt(spdlog::level::level_enum level, const char* fmt, va_lis
     char buf[512];
     vsnprintf(buf, sizeof(buf), fmt, args);
     spdlog::default_logger_raw()->log(spdlog::source_loc{}, level, buf);
+}
+
+void TableCellCenteredSetCursorPosY(float size) {
+    float textHeight = ImGui::GetTextLineHeight();
+    float offsetY = (size - textHeight + 5.0f) * 0.5f;
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + offsetY);
 }
 
 void TableCellCenteredText(const char* text) {
@@ -135,164 +138,10 @@ void BK_LOG_ERROR(const char* fmt, ...) {
 }
 
 const char* port_mapName(int map_id) {
-    switch (map_id) {
-        // Spiral Mountain
-        case 0x01:
-        case 0x8C:
-            return "Spiral Mountain";
-        // Mumbo's Mountain
-        case 0x02:
-        case 0x0C:
-        case 0x0E:
-            return "Mumbo's Mountain";
-        // Treasure Trove Cove
-        case 0x05:
-        case 0x06:
-        case 0x07:
-        case 0x0A:
-        case 0x8F:
-            return "Treasure Trove Cove";
-        // Clanker's Cavern
-        case 0x0B:
-        case 0x21:
-        case 0x22:
-        case 0x23:
-            return "Clanker's Cavern";
-        // Bubblegloop Swamp
-        case 0x0D:
-        case 0x10:
-        case 0x11:
-        case 0x47:
-            return "Bubblegloop Swamp";
-        // Freezeezy Peak
-        case 0x27:
-        case 0x41:
-        case 0x48:
-        case 0x53:
-        case 0x7F:
-            return "Freezeezy Peak";
-        // Gobi's Valley
-        case 0x12:
-        case 0x13:
-        case 0x14:
-        case 0x15:
-        case 0x16:
-        case 0x1A:
-        case 0x92:
-            return "Gobi's Valley";
-        // Mad Monster Mansion
-        case 0x1B:
-        case 0x1C:
-        case 0x1D:
-        case 0x24:
-        case 0x25:
-        case 0x26:
-        case 0x28:
-        case 0x29:
-        case 0x2A:
-        case 0x2B:
-        case 0x2C:
-        case 0x2D:
-        case 0x2E:
-        case 0x2F:
-        case 0x30:
-        case 0x8D:
-            return "Mad Monster Mansion";
-        // Rusty Bucket Bay
-        case 0x31:
-        case 0x34:
-        case 0x35:
-        case 0x36:
-        case 0x37:
-        case 0x38:
-        case 0x39:
-        case 0x3A:
-        case 0x3B:
-        case 0x3C:
-        case 0x3D:
-        case 0x3E:
-        case 0x3F:
-        case 0x8B:
-            return "Rusty Bucket Bay";
-        // Click Clock Wood
-        case 0x40:
-        case 0x43:
-        case 0x44:
-        case 0x45:
-        case 0x46:
-        case 0x4A:
-        case 0x4B:
-        case 0x4C:
-        case 0x4D:
-        case 0x5A:
-        case 0x5B:
-        case 0x5C:
-        case 0x5E:
-        case 0x5F:
-        case 0x60:
-        case 0x61:
-        case 0x62:
-        case 0x63:
-        case 0x64:
-        case 0x65:
-        case 0x66:
-        case 0x67:
-        case 0x68:
-            return "Click Clock Wood";
-        // Gruntilda's Lair
-        case 0x69:
-        case 0x6A:
-        case 0x6B:
-        case 0x6C:
-        case 0x6D:
-        case 0x6E:
-        case 0x6F:
-        case 0x70:
-        case 0x71:
-        case 0x72:
-        case 0x74:
-        case 0x75:
-        case 0x76:
-        case 0x77:
-        case 0x78:
-        case 0x79:
-        case 0x7A:
-        case 0x80:
-        case 0x8E:
-        case 0x90:
-        case 0x93:
-            return "Gruntilda's Lair";
-        // Cutscenes
-        case 0x1E:
-        case 0x1F:
-        case 0x20:
-        case 0x7B:
-        case 0x7C:
-        case 0x7D:
-        case 0x7E:
-        case 0x81:
-        case 0x82:
-        case 0x83:
-        case 0x84:
-        case 0x85:
-        case 0x86:
-        case 0x87:
-        case 0x88:
-        case 0x89:
-        case 0x8A:
-        case 0x94:
-        case 0x95:
-        case 0x96:
-        case 0x97:
-        case 0x98:
-        case 0x99:
-            return "Cutscene";
-        // File Select
-        case 0x91:
-            return "File Select";
-        default:
-            return "Unknown";
+    if ((enum map_e)map_id == MAP_91_FILE_SELECT) {
+        return "File Select";
     }
+    return port_levelName(map_getLevel((enum map_e)map_id));
 }
 
 int port_getBootSequence(void) {
@@ -301,6 +150,10 @@ int port_getBootSequence(void) {
     if (port_isRomhack())
         return BOOTSEQUENCE_FILESELECT;
     return CVarGetInteger(CVAR_SETTING("BootSequence"), BOOTSEQUENCE_DEFAULT);
+}
+
+int port_bootsUnloaded(void) {
+    return Lighthouse::GetFrameHost() != nullptr;
 }
 
 float port_getRumbleScale(void) {
@@ -420,13 +273,28 @@ std::string Ship_ConvertEnumToReadableName(const std::string& input) {
     return result;
 }
 
-// std::vector <std::pair<std::string, std::string>> miscellaneousTextures = {
-//     { "Music Note", "assets/sprite/ASSET_7D9_NOTE_3_0" },
-// };
-//
-// void LoadGuiTextures() {
-//     auto gui = std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui());
-//     for (const auto entry : miscellaneousTextures) {
-//         gui->LoadGuiTexture(entry.first, entry.second, ImVec4(1, 0, 0, 1));
-//     }
-// }
+typedef struct {
+    std::string name;
+    std::string texturePath;
+    std::string palettePath;
+} PaletteTextureLoad;
+
+std::vector<PaletteTextureLoad> paletteTextureLoad = {
+    { "Music Note", "assets/sprite/ASSET_81B_LIVE_MUSIC_NOTE_1_0", "assets/sprite/ASSET_81B_LIVE_MUSIC_NOTE_1_TLUT" },
+    { "Jiggy", "assets/sprite/ASSET_80D_LIVE_JIGGY_1_0", "assets/sprite/ASSET_80D_LIVE_JIGGY_1_TLUT" },
+    { "Empty Honeycomb", "assets/sprite/ASSET_81D_LIVE_EXTRA_HEALTH_MAX_1_0",
+      "assets/sprite/ASSET_81D_LIVE_EXTRA_HEALTH_MAX_1_TLUT" },
+    { "Mumbo Token", "assets/sprite/ASSET_41A_MUMBO_TOKEN_1_0", "assets/sprite/ASSET_41A_MUMBO_TOKEN_1_TLUT" },
+    { "Blue Jinjo", "assets/sprite/ASSET_804_JINJO_BLUE_0_0", "assets/sprite/ASSET_804_JINJO_BLUE_0_TLUT" },
+    { "Green Jinjo", "assets/sprite/ASSET_803_JINJO_GREEN_0_0", "assets/sprite/ASSET_803_JINJO_GREEN_0_TLUT" },
+    { "Orange Jinjo", "assets/sprite/ASSET_806_JINJO_ORANGE_0_0", "assets/sprite/ASSET_806_JINJO_ORANGE_0_TLUT" },
+    { "Pink Jinjo", "assets/sprite/ASSET_805_JINJO_PINK_0_0", "assets/sprite/ASSET_805_JINJO_PINK_0_TLUT" },
+    { "Yellow Jinjo", "assets/sprite/ASSET_802_JINJO_YELLOW_0_0", "assets/sprite/ASSET_802_JINJO_YELLOW_0_TLUT" },
+};
+
+void LoadGuiTextures() {
+    auto gui = std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui());
+    for (const auto entry : paletteTextureLoad) {
+        gui->LoadGuiTexture(entry.name, entry.texturePath, entry.palettePath, ImVec4(1, 1, 1, 1));
+    }
+}

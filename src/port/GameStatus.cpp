@@ -79,13 +79,31 @@ typedef struct {
 extern PauseLevelEntry D_8036C58C[0xD];
 }
 
+extern "C" const char* port_levelName(enum level_e level) {
+    for (int i = 0; i < 0xD; i++) {
+        if (D_8036C58C[i].level_id == level) {
+            // A romhack's own name for the level wins over the vanilla string.
+            const char* rhName = port_getRomhackLevelName(i);
+            return rhName ? rhName : (const char*)D_8036C58C[i].string;
+        }
+    }
+    // The pause totals table only lists the levels the player can score in, so the
+    // remaining level_e values are supplemented here.
+    switch (level) {
+        case LEVEL_C_BOSS:
+            return "BOSS ARENA";
+        case LEVEL_D_CUTSCENE:
+            return "CUTSCENE";
+        default:
+            return "UNKNOWN LEVEL";
+    }
+}
+
 extern "C" const char* port_getLevelName(int map_id) {
     enum level_e level = map_getLevel((enum map_e)map_id);
     for (int i = 0; i < 0xD; i++) {
         if (D_8036C58C[i].level_id == level) {
-            // Check romhack override first
-            const char* rhName = port_getRomhackLevelName(i);
-            return rhName ? rhName : (const char*)D_8036C58C[i].string;
+            return port_levelName(level);
         }
     }
     return port_mapName(map_id);
@@ -98,7 +116,10 @@ extern "C" void port_getLevelStats(int map_id, s32* noteVal, s32* noteMax, s32* 
     *noteVal = itemscore_noteScores_get(level);
     *jiggyVal = jiggyscore_leveltotal(level);
     *hcVal = honeycombscore_get_level_total(level);
+    port_getLevelMaxima(level, noteMax, jiggyMax, hcMax);
+}
 
+extern "C" void port_getLevelMaxima(enum level_e level, s32* noteMax, s32* jiggyMax, s32* hcMax) {
     int n = port_getRomhackNotesMax();
     *noteMax = (n >= 0) ? n : 100;
     int j = port_getRomhackJiggiesPerWorld();
@@ -117,6 +138,27 @@ extern "C" void port_getLevelStats(int map_id, s32* noteVal, s32* noteMax, s32* 
         hMax = hcSpecial;
     }
     *hcMax = hMax;
+}
+
+extern "C" bool port_pauseTotalsRowVisible(enum level_e level, s32 row) {
+    int hideCollLvl = port_getRomhackHideCollectiblesLevel();
+    int hideJigLvl = port_getRomhackHideJiggiesLevel();
+    if (hideCollLvl < 0)
+        hideCollLvl = LEVEL_6_LAIR;
+    if (hideJigLvl < 0)
+        hideJigLvl = LEVEL_B_SPIRAL_MOUNTAIN;
+
+    bool visible = true;
+    if ((int)level == hideCollLvl) {
+        visible = row != 0 && row != 2;
+    } else if ((int)level == hideJigLvl) {
+        visible = row != 0 && row != 1;
+    }
+    return EventSystem_Should(VB_PAUSEMENU_ROW_VISIBLE, visible, level, row);
+}
+
+extern "C" enum level_e port_pauseTotalsPageLevel(s32 page) {
+    return (enum level_e)D_8036C58C[page].level_id;
 }
 
 extern "C" u16 port_getLevelTime(int map_id) {

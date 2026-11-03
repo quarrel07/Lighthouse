@@ -27,12 +27,12 @@ ActorMarker *bgs_D_803907B8[5] = {NULL};
 
 ActorAnimationInfo chCroctusAnimations[] = {
     {0x000, 0.0f},
-    {0x14B, 3.3e+7f},
-    {0x14B, 1.4f},
-    {0x14B, 3.3e+7f},
-    {0x14B, 1.4f},
-    {0x14B, 2.0f},
-    {0x14B, 2.0f}
+    {ASSET_14B_ANIM_unk, 33000000},
+    {ASSET_14B_ANIM_unk, 1.4f},
+    {ASSET_14B_ANIM_unk, 33000000},
+    {ASSET_14B_ANIM_unk, 1.4f},
+    {ASSET_14B_ANIM_unk, 2.0f},
+    {ASSET_14B_ANIM_unk, 2.0f}
 };
 
 ActorInfo gChCroctus ={
@@ -134,7 +134,8 @@ void chCroctus_update(Actor *this){
         this->volatile_initialized = TRUE;
         if(bgs_D_803907B8[this->actorTypeSpecificField - 1] == 0){
             bgs_D_803907B8[this->actorTypeSpecificField - 1] = this->marker;
-            for(j = this->actorTypeSpecificField; j < 6; j++){
+//          for(j = this->actorTypeSpecificField; j < 6; j++){
+            for(j = this->actorTypeSpecificField; j < 5; j++){
                 if(bgs_D_803907B8[j] != NULL){
                     bgs_D_803907B8[j]->propPtr->isNotFeatherEggOrNote = FALSE;
                     actor_setOpacity(marker_getActor(bgs_D_803907B8[j]), 0);

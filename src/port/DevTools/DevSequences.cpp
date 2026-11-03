@@ -15,7 +15,7 @@ void gcparade_beginFFParade(void);
 void gcparade_beginFinalParade(void);
 void func_8034BA7C(enum map_e map_id, int exit_id); // warp (B&K demo uses MAP_1, exit 93)
 void transitionToMap(enum map_e map, int exit, int transition);
-void func_802E412C(int arg0, int arg1);
+void game_setMapTransitionWithStyle(int arg0, int arg1);
 void func_8034B968(void);          // start the attract demo selected by D_80386110 (sets transition + D_80386114)
 extern int D_80386110;             // attract-demo cycle index
 void func_8025A55C(int, int, int); // fade the active music track
@@ -26,6 +26,8 @@ int getGameMode(void);
 void func_80324DBC(float time, int text_id, int arg2, float* position, void* caller, void* cb1, void* cb2);
 void timedFunc_set_1(float time, void (*func)(int), int arg); // queue a 1-arg delayed call
 void func_80311714(int next_state);                           // set g_Dialog.unk128_3 (parade-credit persist flag)
+void volatileFlag_set(enum volatile_flags_e index, bool value);
+void level_setEnteredFromLair(int arg0);
 }
 
 namespace Lighthouse {
@@ -33,6 +35,8 @@ namespace DevTools {
 
 static int sPending = SEQ_NONE;
 static int sPendingMap = -1;
+static bool sMode9InDemo = false;
+static bool sAttractLoading = false;
 
 void RequestSequence(int seq) {
     sPending = seq;
@@ -45,6 +49,11 @@ void RequestCutsceneMap(int mapId) {
 
 void RegisterDevSequences_Init() {
     REGISTER_LISTENER(GameFrameUpdate, EVENT_PRIORITY_NORMAL, [](IEvent*) {
+        if (sMode9InDemo && !gctransition_8030BDC0() && getGameMode() != GAME_MODE_9_BANJO_AND_KAZOOIE) {
+            sMode9InDemo = false;
+            volatileFlag_set(VOLATILE_FLAG_1F_IN_CHARACTER_PARADE, 0);
+        }
+
         if (sPending == SEQ_NONE || gctransition_8030BDC0()) {
             return;
         }
@@ -56,6 +65,7 @@ void RegisterDevSequences_Init() {
             timedFunc_set_1(1.0f, func_80311714, 0);
             func_80324DBC(1.0f, 0x11C9, 0xA0, nullptr, nullptr, nullptr, nullptr);
             timedFunc_set_1(1.0f, func_80311714, 1);
+            sMode9InDemo = true;
             sPending = SEQ_NONE;
             return;
         }
@@ -84,7 +94,7 @@ void RegisterDevSequences_Init() {
                 transitionToMap(MAP_95_CS_END_ALL_100, 0, 1);
                 break;
             case SEQ_GAME_OVER:
-                func_802E412C(1, 0);
+                game_setMapTransitionWithStyle(1, 0);
                 transitionToMap(MAP_83_CS_GAME_OVER_MACHINE_ROOM, 0, 1);
                 break;
             case SEQ_CUTSCENE_MAP:
@@ -93,9 +103,18 @@ void RegisterDevSequences_Init() {
             default:
                 D_80386110 = seq - SEQ_ATTRACT_BASE;
                 func_8034B968();
+                sAttractLoading = true;
                 break;
         }
     });
+
+    // We need to lie and say we didn't come from the Lair, just in case
+    REGISTER_LISTENER(OnLevelReset, EVENT_PRIORITY_NORMAL, [](IEvent*) {
+        if (sAttractLoading) {
+            level_setEnteredFromLair(0);
+        }
+    });
+    REGISTER_LISTENER(OnMapLoad, EVENT_PRIORITY_NORMAL, [](IEvent*) { sAttractLoading = false; });
 }
 
 } // namespace DevTools

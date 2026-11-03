@@ -4,6 +4,7 @@
 #include "variables.h"
 
 #include "core2/gc/zoombox.h"
+#include "port/ResourceHelpers.h"
 
 extern void func_8025A55C(s32, s32, s32);
 
@@ -78,8 +79,8 @@ static u8 sPortraits[SELECTABLE_PORTAIT_COUNT+1] = {
     ZOOMBOX_SPRITE_13_BLUBBER,
     ZOOMBOX_SPRITE_14_NIPPER,
     ZOOMBOX_SPRITE_15_CLANKER,
-    ZOOMBOX_SPRITE_16_SNIPPET,
-    ZOOMBOX_SPRITE_17_VILE_4,
+    ZOOMBOX_SPRITE_16_MUTIE_SNIPPET,
+    ZOOMBOX_SPRITE_17_VILE,
     ZOOMBOX_SPRITE_18_TIPTUP,
     ZOOMBOX_SPRITE_19_TANKTUP,
     ZOOMBOX_SPRITE_1A_FLIBBIT,
@@ -318,7 +319,8 @@ static bool __gcquiz_func_803192A4(enum ff_question_type_e q_type, s32 q_index, 
         } while (third_answer_cmd == second_answer_cmd);
     }
         
-    char_iter += 2*code94620_func_8031B5B0(); // SKIP
+//  char_iter += 2*code94620_func_8031B5B0(); // SKIP
+    char_iter += 2*ResourceMgr_GetDialogSlot(quiz_question_index, code94620_func_8031B5B0()); // SKIP
     phi_v1 = *(char_iter++); // NEXT
     phi_v1 += (*(char_iter++) << 8);
     char_iter = (u8 *)(uintptr_t)((uintptr_t)sD_803830E0->unkC + phi_v1);
@@ -487,6 +489,8 @@ static void __gcquiz_advanceStateTo(enum gcquiz_state state){
             break;
     }
     sD_803830E0->state = state;
+    CALL_EVENT(OnQuizStateChange, state, sD_803830E0->question_type, sD_803830E0->question_index,
+               (void **)sD_803830E0->zoomboxes, sD_803830E0->answer_values);
 }
 
 void __gcquiz_func_80319E20(s32 portrait_id, s32 zoombox_state) {
@@ -516,8 +520,14 @@ void gcquiz_func_80319EA4(void) {
     if(sD_803830E0 == NULL)
         return;
 
+    // [port] Lets the localization layer re-read an open question in a new language
+    CALL_EVENT(OnQuizUpdate, sD_803830E0->state, sD_803830E0->question_type,
+               __gcquiz_get_type_start_id(sD_803830E0->question_type) + sD_803830E0->question_index,
+               (void **)&sD_803830E0->unkC, sD_803830E0->answer_str_counts, sD_803830E0->answer_values,
+               &sD_803830E0->quiz_question.answer_options[0][0], (void **)sD_803830E0->zoomboxes);
+
     controller_copyFaceButtons(0, face_button_states);
-    controller_getJoystick(0, joystick_states);
+    controller_copyJoystick(0, joystick_states);
     for(phi_s0 = 0; phi_s0 < 4; phi_s0++){
         gczoombox_update(sD_803830E0->zoomboxes[phi_s0]);
     }

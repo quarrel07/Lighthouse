@@ -7,11 +7,34 @@
 
 #include "functions.h"
 #include "port/ShipUtils.h"
+#include "port/GameStatus.h"
 
-static const char* const kJiggyLevelNames[10] = {
-    "Mumbo's Mountain", "Treasure Trove Cove", "Clanker's Cavern", "Bubblegloop Swamp", "Freezeezy Peak",
-    "Gruntilda's Lair", "Gobi's Valley",       "Click Clock Wood", "Rusty Bucket Bay",  "Mad Monster Mansion",
-};
+void Anchor_DespawnCollectedCollectibles() {
+    for (s32 id = 1; id < 0x65; id++) {
+        if (port_jiggyscore_isCollectedRaw((enum jiggy_e)id)) {
+            ActorMarker* m = func_8032B16C((enum jiggy_e)id);
+            if (m != nullptr) {
+                marker_despawn(m);
+            }
+        }
+    }
+    for (s32 id = 1; id < 0x19; id++) { // HONEYCOMB_COUNT
+        if (port_honeycombscore_getRaw((enum honeycomb_e)id)) {
+            ActorMarker* m = actorArray_findHoneycombMarkerById((enum honeycomb_e)id);
+            if (m != nullptr) {
+                marker_despawn(m);
+            }
+        }
+    }
+    for (s32 id = 1; id < 126; id++) { // MUMBO_TOKEN_COUNT
+        if (mumboscore_get((enum mumbotoken_e)id)) {
+            ActorMarker* m = actorArray_findMumboTokenMarkerById((enum mumbotoken_e)id);
+            if (m != nullptr) {
+                marker_despawn(m);
+            }
+        }
+    }
+}
 
 /**
  * COLLECT_ITEM
@@ -54,21 +77,18 @@ void Anchor::HandlePacket_CollectItem(nlohmann::json& payload) {
                     code_73640_printItemCount(ITEM_26_JIGGY_TOTAL);
                 }
                 if (!IS_RANDO && ShouldShowNotifications()) {
-                    size_t levelIdx = (size_t)(id - 1) / 10;
-                    const char* where = levelIdx < (sizeof(kJiggyLevelNames) / sizeof(kJiggyLevelNames[0]))
-                                            ? kJiggyLevelNames[levelIdx]
-                                            : "an unknown level";
+                    const char* where = port_levelName((enum level_e)((id - 1) / 10 + 1));
                     Notification::Emit({
                         .prefix = GetClientName(payload.value("clientId", 0u)),
                         .message = "collected Jiggy #" + std::to_string(((id - 1) % 10) + 1) + " in " + where,
                     });
                 }
             }
+            // The Save Editor sends from whatever map it's on, so look for the jiggy here regardless.
+            if (ActorMarker* m = func_8032B16C((enum jiggy_e)id)) {
+                marker_despawn(m);
+            }
             if (sameMap) {
-                ActorMarker* m = func_8032B16C((enum jiggy_e)id);
-                if (m != nullptr) {
-                    marker_despawn(m);
-                }
                 if (id == JIGGY_20_BGS_ELEVATED_WALKWAY || id == JIGGY_25_BGS_MAZE) {
                     func_802D6924();
                 }

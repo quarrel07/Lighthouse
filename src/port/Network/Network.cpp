@@ -1,4 +1,5 @@
 #include "Network.h"
+#include <chrono>
 #include <spdlog/spdlog.h>
 #include <libultraship/libultraship.h>
 
@@ -51,7 +52,7 @@ void Network::ProcessOutgoingPackets() {
 
 void Network::SendDataToRemote(const char* payload) {
 #ifdef USE_NETWORKING
-    SPDLOG_DEBUG("[Network] Sending data: {}", payload);
+    SPDLOG_TRACE("[Network] Sending data: {}", payload);
     SDLNet_TCP_Send(networkSocket, payload, strlen(payload) + 1);
 #endif
 }
@@ -77,6 +78,11 @@ void Network::ReceiveFromServer() {
                 OnConnected();
                 break;
             }
+
+            // A refused or unresolvable host fails instantly; don't spin a core retrying it.
+            for (int i = 0; i < 10 && isEnabled; i++) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
         }
 
         SDLNet_SocketSet socketSet = SDLNet_AllocSocketSet(1);
@@ -86,8 +92,9 @@ void Network::ReceiveFromServer() {
 
         // Listen to socket messages
         while (isConnected && networkSocket && isEnabled) {
-            // we check first if socket has data, to not block in the TCP_Recv
-            int socketsReady = SDLNet_CheckSockets(socketSet, 0);
+            // Check for data first so TCP_Recv never blocks.
+            // Must be > 0 or thread returns immediately and spins forever.
+            int socketsReady = SDLNet_CheckSockets(socketSet, 16);
 
             if (socketsReady == -1) {
                 SPDLOG_ERROR("[Network] SDLNet_CheckSockets: {}", SDLNet_GetError());
@@ -148,7 +155,7 @@ void Network::HandleRemoteData(char payload[512]) {
 }
 
 void Network::HandleRemoteJson(std::string payload) {
-    SPDLOG_DEBUG("[Network] Received json: {}", payload);
+    SPDLOG_TRACE("[Network] Received json: {}", payload);
     nlohmann::json jsonPayload;
     try {
         jsonPayload = nlohmann::json::parse(payload);

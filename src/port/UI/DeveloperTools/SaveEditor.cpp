@@ -4,6 +4,9 @@
 #include "port/Rando/Logic/Logic.h"
 #include "port/Rando/CustomObject/CustomObject.h"
 #include "port/Enhancements/Events/Hooks/Events.h"
+#include "port/FrameHost.h"
+#include "port/GameStatus.h"
+#include "port/Network/Anchor/Anchor.h"
 #include "port/UI/UIWidgets.hpp"
 #include "port/UI/Notification.h"
 #include "port/Save/Types.h"
@@ -24,12 +27,12 @@
 #define DEFAULT_MAX_GOLD_FEATHERS 10
 
 extern "C" {
-bool ability_isUnlocked(enum ability_e uid);
+bool player_isAbilityUnlocked(enum ability_e uid);
 void jiggyscore_setCollected(s32 indx, s32 val);
 void honeycombscore_set(enum honeycomb_e indx, bool val);
 void mumboscore_set(enum mumbotoken_e indx, bool val);
 s32 itemscore_noteScores_get(enum level_e lvl_id);
-extern u8 D_80385FF0[0xE];
+extern u8 sItemscoreNoteScores[0xE];
 
 extern struct {
     u8 D_803832C0[0xD];
@@ -123,7 +126,7 @@ void SaveEditor_UpdateCheckTracker(RandoSaveCheck randoSaveCheck) {
             break;
         case RI_MOLEHILL:
             if (randoSaveCheck.obtained) {
-                ability_unlock((ability_e)randoSaveCheck.randoCollectionId);
+                player_unlockAbility((ability_e)randoSaveCheck.randoCollectionId);
             } else {
                 ability_setLearned((ability_e)randoSaveCheck.randoCollectionId, 0);
             }
@@ -145,14 +148,16 @@ void SaveEditor_DrawUnlocks() {
             ImGui::SeparatorText("Ability Unlocks");
             for (int i = ABILITY_0_BARGE; i <= ABILITY_12_WONDERWING; i++) {
                 ImGui::PushID(i);
-                bool isUnlocked = ability_isUnlocked((ability_e)i);
+                bool isUnlocked = player_isAbilityUnlocked((ability_e)i);
                 std::string abilName = "Unlock " + abilityNameList[i];
                 if (UIWidgets::Checkbox(abilName.c_str(), &isUnlocked)) {
-                    if (ability_isUnlocked((ability_e)i)) {
-                        ability_setLearned((ability_e)i, false);
-                    } else {
-                        ability_setLearned((ability_e)i, true);
-                    }
+                    Lighthouse::RunOnGameThread([i] {
+                        if (player_isAbilityUnlocked((ability_e)i)) {
+                            ability_setLearned((ability_e)i, false);
+                        } else {
+                            ability_setLearned((ability_e)i, true);
+                        }
+                    });
                 }
                 ImGui::PopID();
             }
@@ -162,13 +167,15 @@ void SaveEditor_DrawUnlocks() {
             for (int i = FILEPROG_31_MM_OPEN; i <= FILEPROG_39_CCW_OPEN; i++) {
                 ImGui::PushID(i);
                 bool isUnlocked = fileProgressFlag_get((file_progress_e)i);
-                std::string worldName = "Unlock " + worldNameList[progressToLevelMap.at(i) - 1];
+                std::string worldName = "Unlock " + std::string(port_levelName((enum level_e)progressToLevelMap.at(i)));
                 if (UIWidgets::Checkbox(worldName.c_str(), &isUnlocked)) {
-                    if (fileProgressFlag_get((file_progress_e)i)) {
-                        fileProgressFlag_set((file_progress_e)i, false);
-                    } else {
-                        fileProgressFlag_set((file_progress_e)i, true);
-                    }
+                    Lighthouse::RunOnGameThread([i] {
+                        if (fileProgressFlag_get((file_progress_e)i)) {
+                            fileProgressFlag_set((file_progress_e)i, false);
+                        } else {
+                            fileProgressFlag_set((file_progress_e)i, true);
+                        }
+                    });
                 }
                 ImGui::PopID();
             }
@@ -184,11 +191,13 @@ void SaveEditor_DrawUnlocks() {
                 bool isUnlocked = fileProgressFlag_get((file_progress_e)i);
                 std::string cauldronName = "Unlock " + warpCauldronList[i - FILEPROG_49_PINK_CAULDRON_1_ACTIVE];
                 if (UIWidgets::Checkbox(cauldronName.c_str(), &isUnlocked)) {
-                    if (fileProgressFlag_get((file_progress_e)i)) {
-                        fileProgressFlag_set((file_progress_e)i, false);
-                    } else {
-                        fileProgressFlag_set((file_progress_e)i, true);
-                    }
+                    Lighthouse::RunOnGameThread([i] {
+                        if (fileProgressFlag_get((file_progress_e)i)) {
+                            fileProgressFlag_set((file_progress_e)i, false);
+                        } else {
+                            fileProgressFlag_set((file_progress_e)i, true);
+                        }
+                    });
                 }
                 ImGui::PopID();
             }
@@ -218,7 +227,7 @@ void SaveEditor_DrawGeneralTab() {
                                          .labelPosition = UIWidgets::LabelPositions::None,
                                          .color = THEME_COLOR,
                                      })) {
-                item_set(ITEM_14_HEALTH, curHealth);
+                Lighthouse::RunOnGameThread([curHealth] { item_set(ITEM_14_HEALTH, curHealth); });
             }
             ImGui::TableNextColumn();
             if (UIWidgets::SliderInt("maxHealth", &maxHealth,
@@ -230,19 +239,21 @@ void SaveEditor_DrawGeneralTab() {
                                          .labelPosition = UIWidgets::LabelPositions::None,
                                          .color = THEME_COLOR,
                                      })) {
-                item_set(ITEM_15_HEALTH_TOTAL, maxHealth);
+                Lighthouse::RunOnGameThread([maxHealth] { item_set(ITEM_15_HEALTH_TOTAL, maxHealth); });
             }
             ImGui::EndTable();
         }
         if (UIWidgets::Checkbox("Double Health", &dblHealthUnlocked)) {
-            if (fileProgressFlag_get(FILEPROG_B9_DOUBLE_HEALTH)) {
-                fileProgressFlag_set(FILEPROG_B9_DOUBLE_HEALTH, false);
-                if (item_getCount(ITEM_14_HEALTH) > DEFAULT_MAX_HEALTH) {
-                    item_set(ITEM_14_HEALTH, item_getCount(ITEM_15_HEALTH_TOTAL));
+            Lighthouse::RunOnGameThread([] {
+                if (fileProgressFlag_get(FILEPROG_B9_DOUBLE_HEALTH)) {
+                    fileProgressFlag_set(FILEPROG_B9_DOUBLE_HEALTH, false);
+                    if (item_getCount(ITEM_14_HEALTH) > DEFAULT_MAX_HEALTH) {
+                        item_set(ITEM_14_HEALTH, item_getCount(ITEM_15_HEALTH_TOTAL));
+                    }
+                } else {
+                    fileProgressFlag_set(FILEPROG_B9_DOUBLE_HEALTH, true);
                 }
-            } else {
-                fileProgressFlag_set(FILEPROG_B9_DOUBLE_HEALTH, true);
-            }
+            });
         }
         if (UIWidgets::SliderInt("extraLives", &curLives,
                                  {
@@ -253,7 +264,7 @@ void SaveEditor_DrawGeneralTab() {
                                      .labelPosition = UIWidgets::LabelPositions::None,
                                      .color = THEME_COLOR,
                                  })) {
-            item_set(ITEM_16_LIFE, curLives);
+            Lighthouse::RunOnGameThread([curLives] { item_set(ITEM_16_LIFE, curLives); });
         }
 
         ImGui::SeparatorText("Ammo");
@@ -268,14 +279,16 @@ void SaveEditor_DrawGeneralTab() {
             if (ImGui::BeginTable("PlayerAmmo", 2)) {
                 ImGui::TableNextColumn();
                 if (UIWidgets::Checkbox("Enable Cheato", &isCheato)) {
-                    if (fileProgressFlag_get((file_progress_e)cheatoValue)) {
-                        fileProgressFlag_set((file_progress_e)cheatoValue, false);
-                        if (item_getCount(id) > value) {
-                            item_set(id, value);
+                    Lighthouse::RunOnGameThread([item = id, limit = value, cheatoValue] {
+                        if (fileProgressFlag_get((file_progress_e)cheatoValue)) {
+                            fileProgressFlag_set((file_progress_e)cheatoValue, false);
+                            if (item_getCount(item) > limit) {
+                                item_set(item, limit);
+                            }
+                        } else {
+                            fileProgressFlag_set((file_progress_e)cheatoValue, true);
                         }
-                    } else {
-                        fileProgressFlag_set((file_progress_e)cheatoValue, true);
-                    }
+                    });
                 }
                 ImGui::TableNextColumn();
                 if (UIWidgets::SliderInt(
@@ -288,7 +301,7 @@ void SaveEditor_DrawGeneralTab() {
                             .labelPosition = UIWidgets::LabelPositions::None,
                             .color = THEME_COLOR,
                         })) {
-                    item_set(id, curAmmo);
+                    Lighthouse::RunOnGameThread([item = id, curAmmo] { item_set(item, curAmmo); });
                 }
                 ImGui::EndTable();
             }
@@ -309,7 +322,7 @@ void SaveEditor_DrawProgressTab() {
                 continue;
             }
 
-            ImGui::SeparatorText(worldNameList[level - 1].c_str());
+            ImGui::SeparatorText(port_levelName((enum level_e)level));
             if (ImGui::BeginTable("WorldTable", 2, ImGuiTableFlags_SizingFixedFit)) {
                 ImGui::TableNextColumn();
 
@@ -322,7 +335,8 @@ void SaveEditor_DrawProgressTab() {
                     ImGui::SameLine();
                     if (UIWidgets::Checkbox(noteLabel.c_str(), &hasAllNotes,
                                             { .labelPosition = UIWidgets::LabelPositions::None })) {
-                        D_80385FF0[level] = hasAllNotes ? 100 : 0;
+                        Lighthouse::RunOnGameThread(
+                            [level, hasAllNotes] { sItemscoreNoteScores[level] = hasAllNotes ? 100 : 0; });
                     }
                     ImGui::TableNextColumn();
                 }
@@ -333,20 +347,32 @@ void SaveEditor_DrawProgressTab() {
                     for (int i = world->jiggyStart; i < (world->jiggyStart + world->jiggyCount); i++) {
                         std::string labelStr = "##jiggy" + std::to_string(i);
                         bool isCollected = SaveEditor_IsJiggyCollected((jiggy_e)i);
-                        int32_t curJiggyCount = item_getCount(ITEM_26_JIGGY_TOTAL);
 
                         ImGui::SameLine();
                         if (UIWidgets::Checkbox(labelStr.c_str(), &isCollected,
                                                 UIWidgets::CheckboxOptions()
                                                     .LabelPosition(UIWidgets::LabelPositions::None)
                                                     .Tooltip(SaveEditor_GetJiggyTooltip((jiggy_e)i)))) {
-                            if (SaveEditor_IsJiggyCollected((jiggy_e)i)) {
-                                jiggyscore_setCollected(i, false);
-                                item_set(ITEM_26_JIGGY_TOTAL, (curJiggyCount - 1));
-                            } else {
-                                jiggyscore_setCollected(i, true);
-                                item_set(ITEM_26_JIGGY_TOTAL, (curJiggyCount + 1));
-                            }
+                            Lighthouse::RunOnGameThread([i, level] {
+                                int32_t curJiggyCount = item_getCount(ITEM_26_JIGGY_TOTAL);
+                                if (SaveEditor_IsJiggyCollected((jiggy_e)i)) {
+                                    jiggyscore_setCollected(i, false);
+                                    func_8034798C();
+                                    item_set(ITEM_26_JIGGY_TOTAL, (curJiggyCount - 1));
+                                    if (level == (int)level_get()) {
+                                        game_transitionToMapResettingLevel(gsworld_getMap(), gsworld_getExit(), 1);
+                                    }
+                                } else {
+                                    jiggyscore_setCollected(i, true);
+                                    ActorMarker* m = func_8032B16C((enum jiggy_e)i);
+                                    if (m != nullptr) {
+                                        marker_despawn(m);
+                                    }
+                                    Anchor::GetInstance()->SendPacket_CollectItem(ANCHOR_COLLECTIBLE_JIGGY, i);
+                                    func_8034798C();
+                                    item_set(ITEM_26_JIGGY_TOTAL, (curJiggyCount + 1));
+                                }
+                            });
                         }
                     }
                 } else {
@@ -367,7 +393,6 @@ void SaveEditor_DrawProgressTab() {
                             (i > world->mumboCount) ? RP_MUMBO_TOKEN_INSIDE_LOGGO : world->mumboStart + (i - 1);
                         std::string labelStr = "##token" + std::to_string(tokenId);
                         bool isCollected = SaveEditor_IsMumboTokenCollected((mumbotoken_e)tokenId);
-                        int32_t curTokenCount = item_getCount(ITEM_1C_MUMBO_TOKEN);
 
                         // Wrap every 10 so the wider worlds don't run off the window.
                         if (i == 1 || (i % 10) != 1) {
@@ -377,13 +402,16 @@ void SaveEditor_DrawProgressTab() {
                                                 UIWidgets::CheckboxOptions()
                                                     .LabelPosition(UIWidgets::LabelPositions::None)
                                                     .Tooltip(SaveEditor_GetMumboTokenTooltip((mumbotoken_e)tokenId)))) {
-                            if (SaveEditor_IsMumboTokenCollected((mumbotoken_e)tokenId)) {
-                                mumboscore_set((mumbotoken_e)tokenId, false);
-                                item_set(ITEM_1C_MUMBO_TOKEN, (curTokenCount - 1));
-                            } else {
-                                mumboscore_set((mumbotoken_e)tokenId, true);
-                                item_set(ITEM_1C_MUMBO_TOKEN, (curTokenCount + 1));
-                            }
+                            Lighthouse::RunOnGameThread([tokenId] {
+                                int32_t curTokenCount = item_getCount(ITEM_1C_MUMBO_TOKEN);
+                                if (SaveEditor_IsMumboTokenCollected((mumbotoken_e)tokenId)) {
+                                    mumboscore_set((mumbotoken_e)tokenId, false);
+                                    item_set(ITEM_1C_MUMBO_TOKEN, (curTokenCount - 1));
+                                } else {
+                                    mumboscore_set((mumbotoken_e)tokenId, true);
+                                    item_set(ITEM_1C_MUMBO_TOKEN, (curTokenCount + 1));
+                                }
+                            });
                         }
                     }
                 } else {
@@ -404,11 +432,13 @@ void SaveEditor_DrawProgressTab() {
                                                 UIWidgets::CheckboxOptions()
                                                     .LabelPosition(UIWidgets::LabelPositions::None)
                                                     .Tooltip(SaveEditor_GetHoneycombTooltip((honeycomb_e)combId)))) {
-                            if (SaveEditor_IsHoneycombCollected((honeycomb_e)combId)) {
-                                honeycombscore_set((honeycomb_e)combId, false);
-                            } else {
-                                honeycombscore_set((honeycomb_e)combId, true);
-                            }
+                            Lighthouse::RunOnGameThread([combId] {
+                                if (SaveEditor_IsHoneycombCollected((honeycomb_e)combId)) {
+                                    honeycombscore_set((honeycomb_e)combId, false);
+                                } else {
+                                    honeycombscore_set((honeycomb_e)combId, true);
+                                }
+                            });
                         }
                     }
                 }
@@ -432,7 +462,8 @@ void DrawRandoFlagEditor() {
             ImGui::PushID(f);
             bool flagState = RANDO_SAVE_FLAGS[f].flagState;
             if (UIWidgets::Checkbox(Rando::StaticData::Flags[(RandoInf)f].name, &flagState)) {
-                CALL_EVENT(SetRandoInfFlag, (RandoInf)f, !RANDO_SAVE_FLAGS[f].flagState);
+                Lighthouse::RunOnGameThread(
+                    [f] { CALL_EVENT(SetRandoInfFlag, (RandoInf)f, !RANDO_SAVE_FLAGS[f].flagState); });
             }
             ImGui::PopID();
         }
@@ -479,7 +510,9 @@ void DrawRandoCheckEditor() {
                     }
 
                     ImGui::PushID(check.randoCheckId);
-                    bool isChanged = false;
+                    bool flipShuffled = false;
+                    bool flipObtained = false;
+                    bool flipSkipped = false;
                     bool isShuffled = check.isShuffled;
                     bool obtained = check.obtained;
                     bool skipped = check.skipped;
@@ -487,26 +520,35 @@ void DrawRandoCheckEditor() {
                     if (UIWidgets::Checkbox(
                             "isShuffled", &isShuffled,
                             UIWidgets::CheckboxOptions().LabelPosition(UIWidgets::LabelPositions::None))) {
-                        RANDO_SAVE_CHECKS[check.randoCheckId].isShuffled = !check.isShuffled;
-                        isChanged = true;
+                        flipShuffled = true;
                     }
                     ImGui::TableNextColumn();
                     if (UIWidgets::Checkbox(
                             "obtained", &obtained,
                             UIWidgets::CheckboxOptions().LabelPosition(UIWidgets::LabelPositions::None))) {
-                        RANDO_SAVE_CHECKS[check.randoCheckId].obtained = !check.obtained;
-                        isChanged = true;
+                        flipObtained = true;
                     }
                     ImGui::TableNextColumn();
                     if (UIWidgets::Checkbox(
                             "skipped", &skipped,
                             UIWidgets::CheckboxOptions().LabelPosition(UIWidgets::LabelPositions::None))) {
-                        RANDO_SAVE_CHECKS[check.randoCheckId].skipped = !check.skipped;
-                        isChanged = true;
+                        flipSkipped = true;
                     }
 
-                    if (isChanged) {
-                        SaveEditor_UpdateCheckTracker(check);
+                    if (flipShuffled || flipObtained || flipSkipped) {
+                        Lighthouse::RunOnGameThread([id = check.randoCheckId, flipShuffled, flipObtained, flipSkipped] {
+                            RandoSaveCheck& saved = RANDO_SAVE_CHECKS[id];
+                            if (flipShuffled) {
+                                saved.isShuffled = !saved.isShuffled;
+                            }
+                            if (flipObtained) {
+                                saved.obtained = !saved.obtained;
+                            }
+                            if (flipSkipped) {
+                                saved.skipped = !saved.skipped;
+                            }
+                            SaveEditor_UpdateCheckTracker(saved);
+                        });
                     }
                     ImGui::TableNextColumn();
 

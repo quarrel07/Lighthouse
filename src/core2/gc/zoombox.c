@@ -66,7 +66,7 @@ gczoomboxPortraitInfo D_8036C6C0[] = {
           {SFX_E6_MEEP_1, 20000, 1.8f},
           {SFX_E7_MEEP_2, 20000, 1.8f}
      }},
-     {ASSET_81D_SPRITE_LIVE_EXTRA_HEALTH_MAX, 0xED, 0x06, {
+     {ASSET_81D_SPRITE_LIVE_EMPTY_HONEYCOMB, 0xED, 0x06, {
           {SFX_102_ZUBBA_TALKING, 20000, 1.4f}
      }},
      {ASSET_827_SPRITE_LIVE_CLOCK, 0xEE, 0x08, {
@@ -128,7 +128,7 @@ gczoomboxPortraitInfo D_8036C6C0[] = {
           {SFX_37_BANJO_OHWW,      32000, 0.3f},
           {SFX_38_BANJO_AYE_1,     32000, 0.3f}
      }},
-     {ASSET_800_SPRITE_SNIPPET, 0xF1, 0x04, {
+     {ASSET_800_SPRITE_MUTIE_SNIPPET, 0xF1, 0x04, {
           {SFX_3F8_UNKNOWN,       32000, 1.1f},
           {SFX_3D_TICKER_WALKING, 32000, 1.1f}
      }},
@@ -206,7 +206,7 @@ gczoomboxPortraitInfo D_8036C6C0[] = {
      {ASSET_810_SPRITE_LIVE_HONEYCOMB, 0xED, 0x04, {
           {SFX_AE_YUMYUM_TALKING, 20000, 1.2f}
      }},
-     {ASSET_81D_SPRITE_LIVE_EXTRA_HEALTH_MAX, 0xED, 0x06, {
+     {ASSET_81D_SPRITE_LIVE_EMPTY_HONEYCOMB, 0xED, 0x06, {
           {SFX_102_ZUBBA_TALKING, 20000, 1.4f}
      }},
      {ASSET_80E_SPRITE_LIVE_EXTRA_LIFE, 0xF0, 0x04, {
@@ -217,10 +217,10 @@ gczoomboxPortraitInfo D_8036C6C0[] = {
           {SFX_E6_MEEP_1, 20000, 1.8f},
           {SFX_E7_MEEP_2, 20000, 1.8f}
      }},
-     {ASSET_812_SPRITE_LIVE_EMPTY_HONEYCOMB, 0xEF, 0x04, {
+     {ASSET_812_SPRITE_LIVE_BEEHIVE, 0xEF, 0x04, {
           {SFX_3FA_HONEYCOMB_TALKING, 15000, 1.0f}
      }},
-     {ASSET_809_SPRITE_CATERPILLAR, 0xF0, 0x05, {
+     {ASSET_809_SPRITE_LIVE_TURBO_TRAINERS, 0xF0, 0x05, {
           {SFX_AD_CATERPILLAR_SQUEAK, 28000, 0.7f}
      }},
      {ASSET_80C_SPRITE_LIVE_WADING_BOOTS, 0xEB, 0x02, {
@@ -303,7 +303,7 @@ gczoomboxPortraitInfo D_8036C6C0[] = {
      {ASSET_822_SPRITE_XMAS_GIFT_BLUE, 0xEC, 0x06, {
           {SFX_414_XMAS_GIFT_TALKING, 20000, -2.0f}
      }},
-     {ASSET_840_SPRITE_WORM, 0xEE, 0x05, {
+     {ASSET_840_SPRITE_CATERPILLAR, 0xEE, 0x05, {
           {SFX_40F_TICKER_TALKING, 20000, 1.4f}
      }},
      {ASSET_848_SPRITE_FREEZING_WATER, 0xEE, 0x06, {
@@ -455,14 +455,15 @@ void func_80315200(GcZoombox *this){
 
 void func_803152C4(GcZoombox *this){
      if(this->unk100 != NULL){
-          func_8033BD20((void **)&this->unk100);
+//        func_8033BD20(&this->unk100);
+          func_8033BD20((BKModelBin **)&this->unk100);
           this->unk100 = NULL;
      }
 }
 
 void func_80315300(GcZoombox *this){
      if(this->model != NULL){
-          func_8033BD20((void **)&this->model);
+          func_8033BD20(&this->model);
           this->model = NULL;
      }
      if(this->anim_ctrl != NULL){
@@ -470,7 +471,8 @@ void func_80315300(GcZoombox *this){
           this->anim_ctrl = NULL;
      }
      if(this->unkF8 != NULL){
-          func_8033BD20((void **)&this->unkF8);
+//        func_8033BD20(&this->unkF8);
+          func_8033BD20((BKModelBin **)&this->unkF8);
           this->unkF8 = NULL;
      }
      func_803152C4(this);
@@ -596,6 +598,11 @@ static s32 _gczoombox_findLineBreak(char *string, s32 line_length){
      if((u8)string[0] == 0xFD && (u8)string[1] == 0x6A){
           return gczoombox_strlen(string);
      }
+     // [port] PAL: a segment that already fits in glyphs is returned whole.
+     i = gczoombox_strlen(string);
+     if(!(line_length < __get_str_print_len(string, i))){
+          return i;
+     }
      for(i = gczoombox_strlen(string); (line_length < (__get_str_print_len(string, i)) || (' ' != string[i] )); i--);
      return i;
 }
@@ -677,7 +684,7 @@ void func_8031594C(GcZoombox * this, u8 *str, s32 arg2, s32 arg3){
 u8 func_80315BC0(GcZoombox *this, enum sfx_e sfx_id, s32 arg2){
      u8 sp1F = func_8030ED2C(sfx_id, arg2) & 0xff;
      func_8030DD90(sp1F, 0);
-     if(this->portrait_id == ZOOMBOX_SPRITE_66_GRUNTILDA_4){
+     if(this->portrait_id == ZOOMBOX_SPRITE_66_GRUNTILDA_BOULDER){
           func_8030DCCC(sp1F, 0x40);
      }
      return sp1F;
@@ -733,7 +740,8 @@ void func_80315C90(GcZoombox *this, s32 arg1) {
             }
             this->prev_sfx = current_sfx;
 
-            if (arg1 != 0) {
+//          if (arg1 != 0) {
+            if (EventSystem_Should(VB_ZOOMBOX_FAST_VOICE, arg1 != 0)) {
                 phi_s1_3 = 15000;
                 phi_s2 = 11000;
                 phi_f2 = -0.1f;
@@ -810,7 +818,8 @@ void func_803162B4(GcZoombox *this){
      s32 textXOfs = 0;
      EventSystem_Should(VB_ZOOMBOX_TEXT_ADJUST, false, this->unk198, &textScale, &textXOfs);
      this->unk16A += textXOfs;
-     text_setNormalTextColor(this->unk168, this->unk168, this->unk168);
+//   text_setNormalTextColor(this->unk168, this->unk168, this->unk168);
+     text_setNormalTextColor(this->unk168, this->unk168, EventSystem_Should(VB_ZOOMBOX_YELLOW_TEXT, false, this) ? 0 : this->unk168);
      if(this->unk1A4_30){
           if(this->unk1A4_17){
                print_dialog_gradient2(this->unk16A, this->unk16C, this->unk0, this->unk166, -1);
@@ -866,7 +875,7 @@ void func_803164B0(GcZoombox *this, Gfx **gfx, Mtx **mtx, s32 arg3, s32 arg4, BK
     codeAEDA0_setPrimaryColorRGB(0xFF, 0xFF, 0xFF);
     func_803382FC(this->unk168 * arg6);
     codeAEDA0_setSpriteDrawMode(5);
-    codeAEDA0_postDrawSprite(gfx);
+    codeAEDA0_drawSprite(gfx);
     viewport_setRenderViewportAndOrthoMatrix(gfx, mtx);
     mlMtxIdent();
     if (this->unk1A4_24) {
@@ -884,7 +893,7 @@ void func_803164B0(GcZoombox *this, Gfx **gfx, Mtx **mtx, s32 arg3, s32 arg4, BK
     gSPMatrix((*gfx)++, (*mtx)++, G_MTX_LOAD | G_MTX_MODELVIEW);
     modelRender_setDepthMode(MODEL_RENDER_DEPTH_NONE);
     func_80344090(arg5, this->unk186, gfx);
-    codeAEDA0_drawSprite(gfx);
+    codeAEDA0_postDrawSprite(gfx);
     viewport_setRenderViewportAndPerspectiveMatrix(gfx, mtx);
 }
 
@@ -898,8 +907,8 @@ void func_80316764(GcZoombox *this, s32 arg1) {
         controller_copySideButtons(0, sp2C);
         phi_f0 = time_getDelta();
     } else {
-        pfsManager_getFirstControllerFaceButtonState(0, sp38);
-        func_8024E640(0, sp2C);
+        controller_copyFaceButtonsPrimary(0, sp38);
+        controller_copySideButtonsPrimary(0, sp2C);
         phi_f0 = time_func_8033DDB8();
     }
 
@@ -1081,7 +1090,7 @@ void func_80316E84(GcZoombox *this, s32 state){
 }
 
 s32 gczoombox_strlen(u8 *arg0){
-    return strlen(arg0);
+    return bk_strlen(arg0);
 }
 
 void gczoombox_update(GcZoombox *this){
@@ -1100,8 +1109,8 @@ void gczoombox_update(GcZoombox *this){
           tmp_f0 = time_getDelta();
      }
      else{
-          pfsManager_getFirstControllerFaceButtonState(0, sp58);
-          func_8024E640(0, sp4C);
+          controller_copyFaceButtonsPrimary(0, sp58);
+          controller_copySideButtonsPrimary(0, sp4C);
           tmp_f0 = time_func_8033DDB8();
      }
 
@@ -1805,10 +1814,13 @@ void gczoombox_defrag(GcZoombox *this) {
 }
 
 void gczoombox_func_80318C48(GcZoombox *this, bool arg1) {
+    // [port] JP text opens with FD 6A, the switch to the JP font. Rewriting that pair drops the font, so JP
+    // inserts the shaky pair in front of it instead, like a string with no format pair.
     if (this != NULL) {
         if (this->unk1A4_30) {
             if (arg1 != false) {
-                if (this->unk0[0] == 0xFD) {
+//              if (this->unk0[0] == 0xFD) {
+                if (this->unk0[0] == 0xFD && this->unk0[1] != 0x6A) {
                     this->unk0[1] = 0x68;
                 } else {
                     func_803153A8(&this->unk0[0], D_803830B0, 0, sizeof(D_803830B0));
@@ -1817,13 +1829,15 @@ void gczoombox_func_80318C48(GcZoombox *this, bool arg1) {
                     func_803153A8(D_803830B0, &this->unk0[2], 0, sizeof(this->unk0) - 2);
                 }
             }
-            else if (this->unk0[0] == 0xFD) {
+//          else if (this->unk0[0] == 0xFD) {
+            else if (this->unk0[0] == 0xFD && this->unk0[1] != 0x6A) {
                     this->unk0[1] = 0x6C;
             }
         }
         if (this->unk1A4_29) {
             if (arg1 != false) {
-                if (this->unk30[0] == 0xFD) {
+//              if (this->unk30[0] == 0xFD) {
+                if (this->unk30[0] == 0xFD && this->unk30[1] != 0x6A) {
                     this->unk30[1] = 0x68;
                     return;
                 }
@@ -1834,7 +1848,8 @@ void gczoombox_func_80318C48(GcZoombox *this, bool arg1) {
                     func_803153A8(D_803830B0, &this->unk30[2], 0, sizeof(this->unk30) - 2);
                 }
             }
-            else if (this->unk30[0] == 0xFD) {
+//          else if (this->unk30[0] == 0xFD) {
+            else if (this->unk30[0] == 0xFD && this->unk30[1] != 0x6A) {
                 this->unk30[1] = 0x6C;
             }
         }

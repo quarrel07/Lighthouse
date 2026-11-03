@@ -1,6 +1,7 @@
 #ifndef LIGHTHOUSE_LANGUAGE_H
 #define LIGHTHOUSE_LANGUAGE_H
 
+#include <cstdint>
 #include <string>
 #include <utility>
 #include <vector>
@@ -24,9 +25,6 @@ std::vector<std::string> GetAvailableLanguageNames();
 // the next dialog. No-op if the name isn't currently available.
 void SetActiveLanguage(const std::string& name);
 
-// Display name of the active language.
-std::string GetActiveLanguage();
-
 // Number of available dialog languages (base + packs).
 int GetAvailableLanguageCount();
 
@@ -36,6 +34,9 @@ std::vector<std::pair<int32_t, const char*>> GetLanguageComboEntries();
 // Stable key for a language name. Used as the imgui combobox key and persisted
 // CVar value so the selection survives reboots and changes to the pack list.
 int32_t LanguageKey(const std::string& name);
+
+// Extracts the hex asset id out of an o2r path.
+bool AssetHexFromPath(const std::string& path, uint32_t& out);
 
 } // namespace Lighthouse
 

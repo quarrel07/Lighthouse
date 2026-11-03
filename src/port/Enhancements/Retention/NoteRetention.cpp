@@ -13,6 +13,7 @@
 #include "port/Enhancements/Events/PortEnhancements.h"
 #include "port/Enhancements/Events/Hooks/Events.h"
 #include "port/Enhancements/Retention/Retention.h"
+#include "port/Save/SaveManager.h"
 #include "port/Romhack/RomhackConfig.h"
 #include "port/Rando/Rando.h"
 #include "port/Rando/CustomObject/CustomObject.h"
@@ -29,11 +30,11 @@ extern "C" {
 
 extern f32 gBundle_yaw;
 extern ActorInfo sumusicNote;
+extern f32 itemPrintValues[0x2C];
 }
 
 namespace {
 
-#define CVAR_NOTE_RETENTION CVAR_ENHANCEMENT("Gameplay.NoteRetention")
 static bool sForcedByAnchor = false;
 #define CVAR_VALUE (CVarGetInteger(CVAR_NOTE_RETENTION, 0) || sForcedByAnchor)
 
@@ -82,7 +83,6 @@ int64_t noteKey(int32_t mapId, int32_t noteIndex) {
     return ((int64_t)mapId << 32) | (uint32_t)noteIndex;
 }
 
-using retention::activeSlot;
 using retention::systemActive;
 
 // Level whose note count is waiting to be seeded; -1 when nothing is pending.
@@ -99,8 +99,8 @@ bool randoOwnsNoteProps() {
 }
 
 NoteRetentionSaveData* store() {
-    int32_t slot = activeSlot();
-    return slot >= 0 ? &gameFile_saveData[slot].shipSaveData.noteRetention : nullptr;
+    ShipSaveData* data = SaveManager_GetActiveShipData();
+    return data != nullptr ? &data->noteRetention : nullptr;
 }
 
 bool indexInRange(int32_t mapId, int32_t index) {
@@ -130,7 +130,7 @@ int32_t countCollectedForLevel(int32_t levelId) {
     }
     int32_t total = 0;
     for (int32_t mapId = 0; mapId < NOTE_RETENTION_MAP_SLOTS; mapId++) {
-        // Skip empty maps: map_getLevel crashes on non-existent ids (e.g. MAP_0_UNKNOWN).
+        // Skip empty maps: map_getLevel crashes on non-existent ids (e.g. MAP_0_NIL).
         int32_t mapTotal = 0;
         for (int32_t b = 0; b < NOTE_RETENTION_BYTES_PER_MAP; b++) {
             uint8_t byte = s->collected[mapId][b];
@@ -241,7 +241,19 @@ extern "C" void port_noteRetention_onActorsFreed(void) {
     noteActorQueue.clear();
 }
 
+// Queue the same deferred reseed a level entry uses; it waits for normal play, so it can't fire
+// mid-transition or in the pause menu.
+extern "C" void port_noteRetention_requestReseed(void) {
+    if (!systemActive() || !applyEnabled()) {
+        return;
+    }
+    sPendingSeedLevel = (int32_t)level_get();
+}
+
 extern "C" void port_noteRetention_setForced(int32_t forced) {
+    if (sForcedByAnchor == (forced != 0)) {
+        return;
+    }
     sForcedByAnchor = forced != 0;
     ShipInit::Init(CVAR_NOTE_RETENTION);
 }
@@ -330,6 +342,7 @@ void RegisterNoteRetention_Init() {
             return;
         }
         item_adjustByDiffWithoutHud(ITEM_C_NOTE, countCollectedForLevel(level) - item_getCount(ITEM_C_NOTE));
+        itemPrintValues[ITEM_C_NOTE] = (f32)item_getCount(ITEM_C_NOTE);
     });
 
     // Seeding ITEM_C_NOTE re-triggers vanilla high-score dialogs; suppress them.
@@ -460,16 +473,6 @@ static void RegisterRetentionSaving_Init() {
         if (NoteLocal* nl = bundleNoteLocal(ev->actor)) {
             activeNoteSet.erase(noteKey(nl->mapId, nl->noteIndex));
             nl->magic = 0;
-        }
-    });
-
-    // bcopy's scratch-slot save buffer doesn't carry our bits; sync them in.
-    COND_HOOK(OnSaveFileSave, EVENT_PRIORITY_HIGH, true, [](IEvent* event) {
-        OnSaveFileSave* ev = (OnSaveFileSave*)event;
-        SaveData* buf = (SaveData*)ev->saveBuffer;
-        NoteRetentionSaveData* live = store();
-        if (buf != nullptr && live != nullptr && &buf->shipSaveData.noteRetention != live) {
-            buf->shipSaveData.noteRetention = *live;
         }
     });
 }

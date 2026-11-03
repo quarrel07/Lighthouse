@@ -48,7 +48,7 @@ ActorInfo gChBlubber = {
 };
 
 /* .code */
-static void __chBlubber_initiliaze(Actor *this){
+static void __chBlubber_initialize(Actor *this){
     ActorLocal_Blubber *local = (ActorLocal_Blubber *)&this->local;
 
     anctrl_setTransitionDuration(this->anctrl, 0.2f);
@@ -175,7 +175,8 @@ static void __chBlubber_updateFunc(Actor *this){
         local->unk24 = 0;
     }
 
-    if(!mapSpecificFlags_get(TTC_SPECIFIC_FLAG_1_UNKNOWN) && !subaddie_playerIsWithinSphereAndActive(this, 2500))
+//  if(!mapSpecificFlags_get(TTC_SPECIFIC_FLAG_1_UNKNOWN) && !subaddie_playerIsWithinSphereAndActive(this, 2500))
+    if(!mapSpecificFlags_get(TTC_SPECIFIC_FLAG_1_UNKNOWN) && !EventSystem_Should(VB_ACTOR_UPDATE_DISTANCE, subaddie_playerIsWithinSphereAndActive(this, 2500), this))
         return;
     
     if(!this->volatile_initialized){
@@ -216,7 +217,7 @@ static void __chBlubber_updateFunc(Actor *this){
         case CH_BLUBBER_STATE_1_UNKNOWN:
             if(!this->initialized){
                 actor_collisionOff(this);
-                __chBlubber_initiliaze(this);
+                __chBlubber_initialize(this);
             }
             __func_80387774(&this);
             

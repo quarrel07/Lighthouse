@@ -21,6 +21,7 @@
 #include "port/build.h"
 #include "port/Extractor/ExtractFlow.h"
 #include "port/Extractor/GameExtractor.h"
+#include "port/FrameHost.h"
 #include "port/LaunchArgs.h"
 #include "port/UI/cvar_prefixes.h"
 #include "port/UI/LighthouseGui.hpp"
@@ -42,10 +43,9 @@ typedef struct {
 
 OTRVersion ReadPortVersionFromOTR(std::string otrPath) {
     OTRVersion version = {};
-
-    // Use a temporary archive instance to load the otr and read the version file
     auto archive = std::make_shared<Ship::O2rArchive>(otrPath);
-    if (archive->Open()) {
+    archive->Load();
+    if (archive->IsLoaded()) {
         auto t = archive->LoadFile("portVersion");
         if (t != nullptr && t->IsLoaded) {
             auto stream = std::make_shared<Ship::MemoryStream>(t->Buffer->data(), t->Buffer->size());
@@ -54,6 +54,7 @@ OTRVersion ReadPortVersionFromOTR(std::string otrPath) {
             version.major = reader->ReadUInt16();
             version.minor = reader->ReadUInt16();
             version.patch = reader->ReadUInt16();
+            romArchive = archive;
         } else {
             SPDLOG_WARN("Failed to read portVersion file from O2R: {}", otrPath);
         }
@@ -184,6 +185,9 @@ void GameEngine::RunExtract(int argc, char* argv[]) {
             }
             continue;
         }
+        if (Lighthouse::IsFrameHostFlag(arg)) {
+            continue;
+        }
         args.push_back(arg);
     }
     GameExtractor extract;
@@ -197,20 +201,22 @@ void GameEngine::RunExtract(int argc, char* argv[]) {
     std::string installPath = Ship::Context::GetAppBundlePath();
     std::string file;
 
+    if (shouldRegen) {
 #if defined(__SWITCH__)
-    LighthouseGui::RegisterPopup("Outdated ROM Archives",
-                                 "\x1b[2;2HYou've launched Lighthouse with an old ROM O2R file."
-                                 "\x1b[4;2HPlease regenerate a new ROM O2R and relaunch."
-                                 "\x1b[6;2HPress the Home button to exit...",
-                                 "OK", "", [&]() { _Exit(1); });
+        LighthouseGui::RegisterPopup("Outdated ROM Archives",
+                                     "\x1b[2;2HYou've launched Lighthouse with an old ROM O2R file."
+                                     "\x1b[4;2HPlease regenerate a new ROM O2R and relaunch."
+                                     "\x1b[6;2HPress the Home button to exit...",
+                                     "OK", "", [&]() { _Exit(1); });
 #elif defined(__WIIU__)
-    LighthouseGui::RegisterPopup("Outdated ROM Archives",
-                                 "You've launched Lighthouse with an old a ROM O2R file.\n\n"
-                                 "Please generate a ROM O2R and relaunch.\n\n"
-                                 "Press and hold the Power button to shutdown...",
-                                 "OK", "", [&]() { _Exit(1); });
-    OSFatal();
+        LighthouseGui::RegisterPopup("Outdated ROM Archives",
+                                     "You've launched Lighthouse with an old a ROM O2R file.\n\n"
+                                     "Please generate a ROM O2R and relaunch.\n\n"
+                                     "Press and hold the Power button to shutdown...",
+                                     "OK", "", [&]() { _Exit(1); });
+        OSFatal();
 #endif
+    }
 
     if (!std::filesystem::exists(Ship::Context::LocateFileAcrossAppDirs("/assets"))) {
         LighthouseGui::RegisterPopup(
@@ -226,12 +232,16 @@ void GameEngine::RunExtract(int argc, char* argv[]) {
         LighthouseGui::RegisterPopup("Outdated ROM Archives",
                                      "Your ROM archives were created with incompatible versions of Lighthouse.\n"
                                      "You will now be redirected to re-extract them.");
-        // Resolve through the same lookup DetectOTRVersion used to find the archives. The bare
-        // filename is relative to cwd, which on macOS is NOT the data folder (the SHIP_HOME cwd
-        // anchor fails on the unexpanded "~" from LSEnvironment), so the remove silently missed
-        // and the game kept accepting the old archive it had just declared incompatible.
+        romArchive = nullptr;
         for (const auto& archive : kRomArchives) {
-            std::filesystem::remove(Ship::Context::LocateFileAcrossAppDirs(archive));
+            std::error_code ec;
+            std::string path = Ship::Context::LocateFileAcrossAppDirs(archive, "bk");
+            while (std::filesystem::exists(path) && std::filesystem::remove(path, ec)) {
+                path = Ship::Context::LocateFileAcrossAppDirs(archive, "bk");
+            }
+            if (ec) {
+                SPDLOG_ERROR("Couldn't remove outdated {}: {}", path, ec.message());
+            }
         }
     }
 
@@ -274,7 +284,7 @@ void GameEngine::RunExtract(int argc, char* argv[]) {
 #elif (defined(__WIIU__) || defined(__SWITCH__))
                     extractStep = ES_VERIFY;
 #else
-                    extractStep = ES_EXTRACT;
+                    extractStep = args.empty() ? ES_EXTRACT : ES_EXTRACT_ARGS;
 #endif
                 } else {
                     std::string msg;
@@ -398,6 +408,7 @@ void GameEngine::RunExtract(int argc, char* argv[]) {
                 break;
             }
             case ES_EXTRACT_ARGS: {
+                romArchive = nullptr;
 #if !defined(__SWITCH__) && !defined(__WIIU__)
                 if (args.size() == 0) {
                     LighthouseGui::RegisterPopup(
@@ -499,8 +510,20 @@ void GameEngine::RunExtract(int argc, char* argv[]) {
                     }
                     case PS_FIRST: {
                         if (args.empty()) {
-                            std::string baserom = Ship::Context::GetPathRelativeToAppDirectory("baserom.us.z64");
-                            if (std::filesystem::exists(baserom) && extract.LoadRomFromPath(baserom)) {
+                            // The names the build and the README use, not just baserom.us.z64.
+                            static const char* kRomNames[] = {
+                                "baserom.us.z64",     "baserom.z64",    "baserom.us.v10.z64",
+                                "baserom.us.v11.z64", "baserom.jp.z64", "baserom.pal.z64",
+                            };
+                            std::string baserom;
+                            for (const char* name : kRomNames) {
+                                std::string candidate = Ship::Context::GetPathRelativeToAppDirectory(name);
+                                if (std::filesystem::exists(candidate)) {
+                                    baserom = candidate;
+                                    break;
+                                }
+                            }
+                            if (!baserom.empty() && extract.LoadRomFromPath(baserom)) {
                                 extracting = true;
                                 extractStarted = true;
                                 file = extract.GetRomPath();

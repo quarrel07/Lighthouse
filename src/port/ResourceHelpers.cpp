@@ -9,6 +9,7 @@
 #include "libultraship/bridge/resourcebridge.h"
 #include "libultraship/libultraship.h"
 #include "ship/Context.h"
+#include "Resource/Importers/MusicFactory.h"
 #include "UI/cvar_prefixes.h"
 #include <spdlog/spdlog.h>
 #include <algorithm>
@@ -24,8 +25,8 @@
 
 #include "Resource/AssetTrace.h"
 
-#include "GameVersion/AssetVersionRemap.h"
 #include "GameVersion/BaseGameVersion.h"
+#include "Localization/Language.h"
 
 #include "enums.h"
 
@@ -41,9 +42,10 @@ extern BKSnsDemoEntry D_80371F78[3];
 }
 
 // Dialog language state — detected at boot from o2r version
-static int sDialogLanguageCount = 1; // 1 for US/JP, 3 for PAL (EN/FR/DE)
-static int sDialogLanguage = 0;      // 0=English, 1=French, 2=German
-static bool sIsJapanese = false;     // true when a JP o2r is loaded
+static int sDialogLanguageCount = 1;  // 1 for US/JP, 3 for PAL (EN/FR/DE)
+static int sDialogLanguage = 0;       // 0=English, 1=French, 2=German
+static int sScopedDialogLanguage = 0; // the same, within a hack's own language pack
+static bool sIsJapanese = false;      // true when a JP o2r is loaded
 
 namespace {
 std::unordered_set<uint32_t> sEmptyAssetSlots;
@@ -105,84 +107,14 @@ const std::unordered_map<uint32_t, std::string>& GetAssetSymbolMap() {
             }
         }
 
-        // If this o2r was built from a non-v1.0 ROM, inject v1.0 ID aliases so
-        // the decomp's hardcoded IDs resolve transparently.
-        const std::unordered_map<uint32_t, uint32_t>* remapTable = nullptr;
-
-        switch (Lighthouse::GetBaseVersion()) {
-            case BK_VER_US_11:
-                remapTable = &sV10toV11Remap;
-                SPDLOG_INFO("Loaded US v1.1 o2r with {} entries", symbolMap.size());
-                break;
-            case BK_VER_PAL:
-                remapTable = &sV10toPALRemap;
-                SPDLOG_INFO("Loaded PAL o2r with {} entries", symbolMap.size());
-                break;
-            case BK_VER_JP:
-                remapTable = &sV10toJPRemap;
-                SPDLOG_INFO("Loaded JP o2r with {} entries", symbolMap.size());
-                break;
-            case BK_VER_US_10:
-            default:
-                SPDLOG_INFO("Loaded US v1.0 o2r");
-                // v1.0 or a v1.0-based romhack: decomp IDs are already correct.
-                break;
-        }
-
         // Non-v1.0 ROMs keep the SNS picture demos one slot lower (0x5E, matching
         // the PAL VER_SELECT in the decomp) and their map setups place the demo
         // entry points at that exit id too. The compiled v1.0 value (0x5F) would
         // load the right demo file via the alias but warp to a nonexistent exit,
         // so retarget the table; the 2508/2511/2513 aliases cover the asset side.
-        if (remapTable) {
+        if (Lighthouse::GetBaseVersion() != BK_VER_US_10) {
             for (auto& entry : D_80371F78) {
                 entry.exit = 0x5E;
-            }
-        }
-
-        // Relocate the JP world-name banners to their 0x1600 aliases for a JP
-        // base (a JP pack does this re-point at language-select time instead).
-        if (Lighthouse::GetBaseVersion() == BK_VER_JP) {
-            constexpr uint32_t kJpBannerNativeBase = 0xE2C;
-            constexpr uint32_t kJpBannerAliasBase = 0x1600; // SPRITE_WORLD_NAME_TOTAL
-            constexpr uint32_t kJpBannerCount = 13;         // 0xE2C..0xE38
-            for (uint32_t i = 0; i < kJpBannerCount; i++) {
-                auto it = symbolMap.find(kJpBannerNativeBase + i);
-                if (it != symbolMap.end()) {
-                    std::string path = std::move(it->second);
-                    symbolMap.erase(kJpBannerNativeBase + i);
-                    symbolMap[kJpBannerAliasBase + i] = std::move(path);
-                }
-            }
-        }
-
-        if (remapTable) {
-            // Snapshot the manifest before injection
-            const auto snapshot = symbolMap;
-            for (const auto& [v10Id, targetId] : *remapTable) {
-                if (auto targetEntry = snapshot.find(targetId); targetEntry != snapshot.end()) {
-                    symbolMap[v10Id] = targetEntry->second;
-                }
-                // An empty slot on the native id stays empty under its v1.0 alias,
-                // so the decomp's hardcoded v1.0 id resolves to a silent NULL too.
-                if (sEmptyAssetSlots.count(targetId)) {
-                    sEmptyAssetSlots.insert(v10Id);
-                }
-            }
-
-            // v1.0 demo ids that the table doesn't carry are the zero-payload slots of
-            // the demo section. Alias them down 0x100 like the rest of the demo block.
-            for (uint32_t v10Id = 0x9A3; v10Id <= 0xA0A; v10Id++) {
-                if (remapTable->count(v10Id)) {
-                    continue;
-                }
-                const uint32_t targetId = v10Id - 0x100;
-                if (auto targetEntry = snapshot.find(targetId); targetEntry != snapshot.end()) {
-                    symbolMap[v10Id] = targetEntry->second;
-                } else {
-                    symbolMap.erase(v10Id);
-                    sEmptyAssetSlots.insert(v10Id);
-                }
             }
         }
     });
@@ -216,14 +148,6 @@ extern "C" int ResourceMgr_GetDialogLanguage(void) {
     return sDialogLanguage;
 }
 
-extern "C" void ResourceMgr_SetDialogLanguage(int lang) {
-    if (lang >= 0 && lang < sDialogLanguageCount) {
-        sDialogLanguage = lang;
-        func_8031B5C4(lang); // Set decomp's internal language index
-        SPDLOG_INFO("[ResourceHelpers] Dialog language set to {}", lang);
-    }
-}
-
 std::shared_ptr<Ship::IResource> GetResourceByName(const char* path) {
     try {
         return Ship::Context::GetRawInstance()->GetResourceManager()->LoadResource(path);
@@ -241,6 +165,22 @@ static std::unordered_map<uint32_t, std::shared_ptr<Ship::IResource>> sResourceR
 // source archive's paths (a loaded language pack).
 static std::unordered_map<uint32_t, std::string> sDialogOverride;
 
+// The same, for a language pack scoped to the active romhack (mods/~lang/<hack>/).
+static std::unordered_map<uint32_t, std::string> sScopedDialogOverride;
+
+// Which language slot to read in this asset's blob. A hack's pack numbers its languages on its
+// own, so its assets use its slot; everything else keeps the game's.
+extern "C" int ResourceMgr_GetDialogSlot(uint32_t assetId, int defaultSlot) {
+    return sScopedDialogOverride.count(assetId) != 0 ? sScopedDialogLanguage : defaultSlot;
+}
+
+// Active mod-overlay re-point: maps v1.0 asset IDs to a mod archive's own paths.
+struct OverlayAsset {
+    std::string archivePath;
+    std::string path;
+};
+static std::unordered_map<uint32_t, OverlayAsset> sOverlayOverride;
+
 // Bumped on every language change. This is the single "language changed" signal:
 // the localization layer reads it to drive every live reaction: font slot, model
 // re-fetch, file-select rebuild, etc
@@ -254,7 +194,7 @@ extern "C" int ResourceMgr_GetLanguageGeneration(void) {
 // pack rather than the base game). Used by the model reload to know which models
 // must track the language.
 extern "C" int ResourceMgr_IsAssetRepointed(uint32_t assetId) {
-    return sDialogOverride.find(assetId) != sDialogOverride.end() ? 1 : 0;
+    return (sDialogOverride.count(assetId) != 0 || sScopedDialogOverride.count(assetId) != 0) ? 1 : 0;
 }
 
 // The base game's own o2r path for an asset id, ignoring any active language re-point.
@@ -266,12 +206,81 @@ std::string ResourceHelpers_GetBaseAssetPath(uint32_t assetId) {
     return std::string();
 }
 
-// The o2r path an asset id resolves to right now.
 std::string ResourceHelpers_GetActiveAssetPath(uint32_t assetId) {
+    if (auto ov = sScopedDialogOverride.find(assetId); ov != sScopedDialogOverride.end()) {
+        return ov->second;
+    }
+    if (auto ov = sOverlayOverride.find(assetId); ov != sOverlayOverride.end()) {
+        return ov->second.path;
+    }
     if (auto ov = sDialogOverride.find(assetId); ov != sDialogOverride.end()) {
         return ov->second;
     }
     return ResourceHelpers_GetBaseAssetPath(assetId);
+}
+
+bool ResourceHelpers_GetOverlayAsset(uint32_t assetId, std::string& outArchivePath, std::string& outPath) {
+    auto it = sOverlayOverride.find(assetId);
+    if (it == sOverlayOverride.end()) {
+        return false;
+    }
+    outArchivePath = it->second.archivePath;
+    outPath = it->second.path;
+    return true;
+}
+
+void ResourceHelpers_BuildOverlayRepoints() {
+    for (const auto& [id, path] : sOverlayOverride) {
+        sResourceRefCache.erase(id);
+    }
+    sOverlayOverride.clear();
+
+    auto archiveManager = Ship::Context::GetRawInstance()->GetResourceManager()->GetArchiveManager();
+    auto archives = archiveManager->GetArchives();
+    if (!archives) {
+        return;
+    }
+
+    for (const auto& archive : *archives) {
+        if (archive == nullptr || !archive->HasFile("assets/aGameConfig")) {
+            continue;
+        }
+        auto files = archive->ListFiles();
+        if (!files) {
+            continue;
+        }
+
+        std::unordered_map<uint32_t, std::string> mine;
+        for (const auto& [hash, path] : *files) {
+            if (path.rfind("assets/", 0) != 0 || path.find("lang/") != std::string::npos) {
+                continue;
+            }
+            uint32_t id = 0;
+            if (!Lighthouse::AssetHexFromPath(path, id)) {
+                continue;
+            }
+            bool part = false;
+            for (size_t cut = path.find('_', path.rfind("ASSET_") + 6); cut != std::string::npos && !part;
+                 cut = path.find('_', cut + 1)) {
+                part = archiveManager->HasFile(path.substr(0, cut));
+            }
+            if (part) {
+                continue;
+            }
+            if (auto [it, inserted] = mine.try_emplace(id, path); !inserted && path.size() < it->second.size()) {
+                it->second = path;
+            }
+        }
+
+        for (auto& [id, path] : mine) {
+            sResourceRefCache.erase(id);
+            sOverlayOverride.insert_or_assign(id, OverlayAsset{ archive->GetPath(), std::move(path) });
+        }
+    }
+
+    if (!sOverlayOverride.empty()) {
+        SPDLOG_INFO("[ResourceHelpers] Re-pointed {} asset id(s) onto romhack overlays", sOverlayOverride.size());
+    }
 }
 
 static char* LoadAndRetainResource(const std::string& path, uint32_t assetId) {
@@ -335,6 +344,34 @@ extern "C" char* ResourceMgr_LoadByAssetId(uint32_t assetId) {
     return nullptr;
 }
 
+// A track carries its own slot volume, read on first ask and kept.
+extern "C" int32_t port_getMusicTrackVolume(uint32_t assetId) {
+    static std::unordered_map<uint32_t, int32_t> sVolumeCache;
+    static std::mutex sVolumeMutex;
+    {
+        const std::lock_guard<std::mutex> lock(sVolumeMutex);
+        if (auto it = sVolumeCache.find(assetId); it != sVolumeCache.end()) {
+            return it->second;
+        }
+    }
+
+    int32_t volume = -1;
+    std::string path = ResourceHelpers_GetActiveAssetPath(assetId);
+    if (!path.empty()) {
+        std::replace(path.begin(), path.end(), '\\', '/');
+        if (auto res = std::dynamic_pointer_cast<Factories::BKMusic>(GetResourceByName(path.c_str()))) {
+            volume = static_cast<int32_t>(res->Volume);
+        }
+    }
+    if (volume < 0) {
+        SPDLOG_WARN("music: asset {} carries no slot volume; using the built-in table", assetId);
+    }
+
+    const std::lock_guard<std::mutex> lock(sVolumeMutex);
+    sVolumeCache[assetId] = volume;
+    return volume;
+}
+
 // Returns the data size of a previously loaded resource (from the ref cache).
 // Used by decomp code that depends on assetCacheCurrentSize (e.g. demo_load).
 extern "C" size_t ResourceMgr_GetResourceSize(uint32_t assetId) {
@@ -372,15 +409,6 @@ extern "C" char* ResourceMgr_LoadTexOrDListByName(const char* filePath) {
     }
 }
 
-extern "C" char* ResourceMgr_LoadIfDListByName(const char* filePath) {
-    auto res = GetResourceByName(filePath);
-
-    if (res->GetInitData()->Type == static_cast<uint32_t>(Fast::ResourceType::DisplayList))
-        return (char*)&((std::static_pointer_cast<Fast::DisplayList>(res))->Instructions[0]);
-
-    return nullptr;
-}
-
 extern "C" Gfx* ResourceMgr_LoadGfxByName(const char* path) {
     auto res = std::static_pointer_cast<Fast::DisplayList>(GetResourceByName(path));
     return (Gfx*)&res->Instructions[0];
@@ -390,24 +418,25 @@ extern "C" Vtx* ResourceMgr_LoadVtxByName(char* path) {
     return (Vtx*)ResourceGetDataByName(path);
 }
 
-extern "C" Mtx* ResourceMgr_LoadMtxByName(char* path) {
-    return (Mtx*)ResourceGetDataByName(path);
-}
-
 // Release all retained resource refs so destructors fire before spdlog shutdown
 void ResourceHelpers_ClearRefCache() {
     sResourceRefCache.clear();
 }
 
-void ResourceHelpers_ApplyLanguage(std::unordered_map<uint32_t, std::string> dialogOverride, bool isJapanese,
-                                   int dialogCount, int dialogIndex) {
-    for (const auto& [id, path] : sDialogOverride) {
-        sResourceRefCache.erase(id);
-    }
+void ResourceHelpers_ApplyLanguage(std::unordered_map<uint32_t, std::string> dialogOverride,
+                                   std::unordered_map<uint32_t, std::string> scopedDialogOverride, bool isJapanese,
+                                   int dialogCount, int dialogIndex, int scopedDialogIndex) {
+    auto evict = [](const std::unordered_map<uint32_t, std::string>& m) {
+        for (const auto& [id, path] : m) {
+            sResourceRefCache.erase(id);
+        }
+    };
+    evict(sDialogOverride);
+    evict(sScopedDialogOverride);
     sDialogOverride = std::move(dialogOverride);
-    for (const auto& [id, path] : sDialogOverride) {
-        sResourceRefCache.erase(id);
-    }
+    sScopedDialogOverride = std::move(scopedDialogOverride);
+    evict(sDialogOverride);
+    evict(sScopedDialogOverride);
     ++sLanguageGeneration; // invalidates re-pointed models on their next draw
     sIsJapanese = isJapanese;
     sDialogLanguageCount = (dialogCount > 0) ? dialogCount : 1;
@@ -417,5 +446,6 @@ void ResourceHelpers_ApplyLanguage(std::unordered_map<uint32_t, std::string> dia
         dialogIndex = 0;
     }
     sDialogLanguage = dialogIndex; // keep ResourceMgr_GetDialogLanguage() in sync
+    sScopedDialogLanguage = (scopedDialogIndex >= 0) ? scopedDialogIndex : 0;
     func_8031B5C4(dialogIndex);
 }

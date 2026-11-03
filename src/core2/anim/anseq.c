@@ -3,7 +3,6 @@
 #include "functions.h"
 #include "variables.h"
 
-extern void baMotor_80250E6C(f32, f32);
 extern void func_802BB360(s32, f32);
 extern void func_802BB378(s32, f32, f32);
 extern void func_802BB3AC(s32, f32);
@@ -150,7 +149,7 @@ void anSeq_PushStep_3Arg(bk_vector(AnSeqElement) **ppAnSeq, f32 duration, void *
 
 void anSeq_PushStep_ManyArg(bk_vector(AnSeqElement) **ppAnSeq, f32 duration, void *func_ptr, void* arg_ptr, s32 arg_size){
     AnSeqElement *out = __anSeq_pushStep(ppAnSeq, duration, 4, func_ptr, 0, 0, 0);
-    memcpy(&out->arg0, arg_ptr, arg_size);
+    bk_memcpy(&out->arg0, arg_ptr, arg_size);
 }
 
 # if 0

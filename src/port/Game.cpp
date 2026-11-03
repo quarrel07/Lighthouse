@@ -3,14 +3,20 @@
 #include <CoreFoundation/CoreFoundation.h>
 #endif
 #include <atomic>
+#include <clocale>
 #include <condition_variable>
 #include <cstring>
 #include <cstdlib>
 #include <filesystem>
 #include <chrono>
+#include <functional>
 #include <map>
+#include <memory>
 #include <mutex>
+#include <string>
 #include <thread>
+#include <utility>
+#include <vector>
 
 #include <fast/interpreter.h>
 #include <libultraship.h>
@@ -22,6 +28,7 @@
 #include <SDL2/SDL.h>
 
 #include "DevTools/ThreadWatchdog.h"
+#include "FrameHost.h"
 #include "GameStatus.h"
 #include "Interpolation/FrameInterpolation.h"
 #include "Nametag/Nametag.h"
@@ -34,6 +41,7 @@
 #include "UI/LighthouseModMenuWindow.h"
 
 extern "C" {
+#include <libultra/rdp.h>
 #include "enums.h"
 #include "core1/core1.h"
 #include "core1/main.h"
@@ -44,6 +52,8 @@ void audioManagerThread_entry(void* arg);
 void core1_15B30_sendMesg3ToRenderThread(void);
 OSMesgQueue* thread5_getTaskQueue(void);
 OSMesgQueue* thread5_getSyncQueue(void);
+OSMesgQueue* core1_15B30_getTaskDataListLockQueue(void);
+u32 osDpGetStatus(void);
 }
 
 // The game tick runs on its own thread and submits display lists through the
@@ -60,6 +70,9 @@ struct InterpPair {
     int curr = -1;
     bool should = false;
     uint64_t serial = 0;
+    long long swapNs = 0;
+    unsigned viSerial = 0;
+    bool timed = false;
 };
 std::mutex sInterpMutex;
 std::map<void*, InterpPair> sTaskInterp;
@@ -75,7 +88,20 @@ void (*sSvcFn)(void*) = nullptr;
 void* sSvcArg = nullptr;
 std::atomic<bool> sShutdownRequested{ false };
 
+std::mutex sGameTaskMutex;
+std::vector<std::function<void()>> sGameTasks;
+
 int sTitleMap = 0;
+
+std::unique_ptr<Lighthouse::FrameHost> sHost;
+std::mutex sParkMutex;
+std::condition_variable sParkCv;
+std::atomic<bool> sParked{ false };
+
+std::vector<std::pair<std::string, std::unique_ptr<Lighthouse::FrameHost> (*)()>>& FrameHosts() {
+    static std::vector<std::pair<std::string, std::unique_ptr<Lighthouse::FrameHost> (*)()>> hosts;
+    return hosts;
+}
 
 void DrainRenderService() {
     std::unique_lock<std::mutex> lock(sSvcMutex);
@@ -90,12 +116,54 @@ void DrainRenderService() {
     }
 }
 
+void DrainGameTasks() {
+    std::vector<std::function<void()>> tasks;
+    {
+        std::lock_guard<std::mutex> lock(sGameTaskMutex);
+        tasks.swap(sGameTasks);
+    }
+    for (auto& task : tasks) {
+        task();
+    }
+}
+
 // False on the window thread, including everything that runs during init
 // before the tick thread exists.
 bool OnGameThread() {
     return tIsGameThread;
 }
 } // namespace
+
+Lighthouse::RegisterFrameHost::RegisterFrameHost(const char* flag, std::unique_ptr<FrameHost> (*make)()) {
+    FrameHosts().emplace_back(flag, make);
+}
+
+bool Lighthouse::IsFrameHostFlag(const std::string& arg) {
+    for (const auto& [flag, make] : FrameHosts()) {
+        if (arg == flag) {
+            return true;
+        }
+    }
+    return false;
+}
+
+Lighthouse::FrameHost* Lighthouse::GetFrameHost() {
+    return sHost.get();
+}
+
+void Lighthouse::WakeGame() {
+    std::lock_guard<std::mutex> lock(sParkMutex);
+    sParkCv.notify_all();
+}
+
+void Lighthouse::RunOnGameThread(std::function<void()> fn) {
+    if (sGameThreadDone.load()) {
+        fn();
+        return;
+    }
+    std::lock_guard<std::mutex> lock(sGameTaskMutex);
+    sGameTasks.push_back(std::move(fn));
+}
 
 // A list is submitted while its tick is still recording, so the pair is
 // captured here and travels with the task.
@@ -110,6 +178,9 @@ extern "C" void port_thread5_onSubmit(void* taskData) {
     InterpPair pair;
     FrameInterpolation_GetRecordingPair(&pair.prev, &pair.curr, &pair.should);
     FrameInterpolation_ClaimPair(pair.prev, pair.curr);
+    pair.swapNs = OS_ViLastSwapNs();
+    pair.viSerial = port_getDemoViSerial();
+    pair.timed = GameEngine::WantsTimedPass(pair.curr >= 0, GameEngine::CurrentViPerTick());
     FrameInterpolation_StopRecord();
     Nametag::SubmitFrame(task->data_ptr);
     std::lock_guard<std::mutex> lock(sInterpMutex);
@@ -147,21 +218,85 @@ void RenderTask(void* dlStart) {
     }
     FrameInterpolation_BeginRenderPass(pair.prev, pair.curr, pair.should);
     Nametag::BeginRenderPass(dlStart, pair.should);
+    GameEngine::SetFrameTiming(OS_ViNextRetraceAfterNs(pair.swapNs), pair.viSerial, pair.timed);
     GameEngine::ProcessGfxCommands((Gfx*)dlStart);
     FrameInterpolation_ReleasePair(pair.prev, pair.curr);
 }
 
-// This thread plays the RCP: thread5 hands over a task,
-// we run it and raise SP then DP.
+// A timed pass may start while the previous swap is still waiting to latch.
+bool IsTimedTask(void* dlStart) {
+    std::lock_guard<std::mutex> lock(sInterpMutex);
+    auto it = sTaskInterp.find(dlStart);
+    return it != sTaskInterp.end() && it->second.timed;
+}
+
+bool sTaskReleased = true;
+bool sReleaseDeferred = false;
+
+void SendTaskDone() {
+    OS_SendEventMesg(OS_EVENT_DP);
+    OS_SendEventMesg(OS_EVENT_SP);
+}
+} // namespace
+
+// Hands the task back once the list is no longer read. A timed pass calls this after its
+// last draw; otherwise ServiceRcp does once the pass returns.
+extern "C" void port_releaseRcpTask(void) {
+    if (sTaskReleased) {
+        return;
+    }
+    sTaskReleased = true;
+    if (osDpGetStatus() & DPC_STATUS_FREEZE) {
+        sReleaseDeferred = true;
+        return;
+    }
+    SendTaskDone();
+}
+
+namespace {
+
+// This thread plays the RCP: thread5 hands over a task, it runs and raises DP
+// then SP. Hardware raises SP first, but the list is fully drawn before either
+// goes out. DP has to lead: SP frees thread5 to start the next task, and starting
+// one overwrites the flags the frame's swap token gates on.
 int ServiceRcp() {
+    if (sReleaseDeferred) {
+        if (osDpGetStatus() & DPC_STATUS_FREEZE) {
+            return 0;
+        }
+        sReleaseDeferred = false;
+        SendTaskDone();
+    }
+    OSTask* pending = OS_SpPeekPendingTask();
+    if (pending == nullptr) {
+        return 0;
+    }
+    const bool frozen = (osDpGetStatus() & DPC_STATUS_FREEZE) != 0;
+    if (frozen && !IsTimedTask(pending->t.data_ptr)) {
+        return 0;
+    }
     OSTask* task = OS_SpTakePendingTask();
     if (task == nullptr) {
         return 0;
     }
+    sTaskReleased = false;
     RenderTask(task->t.data_ptr);
-    OS_SendEventMesg(OS_EVENT_SP);
-    OS_SendEventMesg(OS_EVENT_DP);
+    port_releaseRcpTask();
     return 1;
+}
+
+void ParkGame() {
+    while ((OS_SpPeekPendingTask() != nullptr || sReleaseDeferred) && WindowIsRunning()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        ThreadWatchdog_Beat(WATCHDOG_GAME_TICK);
+    }
+    std::unique_lock<std::mutex> lock(sParkMutex);
+    sParked.store(true);
+    while (sHost->WantsFrame() && WindowIsRunning()) {
+        sParkCv.wait_for(lock, std::chrono::milliseconds(250));
+        ThreadWatchdog_Beat(WATCHDOG_GAME_TICK);
+    }
+    sParked.store(false);
 }
 
 // Called before core1_init, which is where these threads are created.
@@ -170,11 +305,12 @@ void EnableThread5() {
     OS_SetQueueBlocking(thread5_getTaskQueue(), 1);
     OS_SetQueueBlocking(thread5_getSyncQueue(), 1);
     // The controller manager parks on its polling queue waiting for OS_EVENT_SI.
-    OS_EnableThreadEntry((void*)pfsManager_entry);
-    OS_SetQueueBlocking(pfsManager_getFrameMesgQ(), 1);
+    OS_EnableThreadEntry((void*)joy_main);
+    OS_SetQueueBlocking(si_getEventQueue(), 1);
     OS_EnableThreadEntry((void*)audioManagerThread_entry);
     OS_SetQueueBlocking(audioManager_getFrameMesgQueue(), 1);
     OS_SetQueueBlocking(audioManager_getReplyMesgQueue(), 1);
+    OS_SetQueueBlocking(core1_15B30_getTaskDataListLockQueue(), 1);
 }
 } // namespace
 
@@ -216,6 +352,10 @@ extern "C" void port_runOnRenderThread(void (*fn)(void*), void* arg) {
     sSvcCv.wait(lock, done);
 }
 
+extern "C" void port_serviceRenderRequests(void) {
+    DrainRenderService();
+}
+
 // Barrier before the tick frees or reads memory an in-flight list references.
 // The game's own EVENT_SYNC handshake is the RDP-done wait.
 extern "C" void port_pipelineSyncPoint(void) {
@@ -240,6 +380,8 @@ void push_frame() {
     static int sTitleCounter = 0;
     sFrameRendered = false;
 
+    DrainGameTasks();
+
     // The window thread keeps the progress modal alive while an inline mod
     // extraction runs; the tick just idles so the extractor gets the machine.
     if (IsInlineModExtractionBusy()) {
@@ -250,9 +392,10 @@ void push_frame() {
     GameEngine::Instance->StartFrame();
     port_animVtx_beginTick();
     const bool recordInterpolation = GameEngine::IsInterpolationEnabled();
-    GameEngine::SetInterpolationRecorded(recordInterpolation);
     if (recordInterpolation) {
         FrameInterpolation_StartRecord();
+    } else {
+        FrameInterpolation_DontInterpolateCamera();
     }
     mainLoop();
     if (recordInterpolation) {
@@ -275,6 +418,40 @@ void push_frame() {
     }
 }
 
+#ifdef __linux__
+static void SetAppImageHome() {
+    const char* appImage = std::getenv("APPIMAGE");
+    if (appImage == nullptr || appImage[0] == '\0' || std::getenv("SHIP_HOME") != nullptr) {
+        return;
+    }
+
+    std::error_code ec;
+    const std::filesystem::path appImageDir = std::filesystem::path(appImage).parent_path();
+    for (const char* file : { "lighthouse.cfg.json", "bk.o2r" }) {
+        if (std::filesystem::exists(appImageDir / file, ec)) {
+            return;
+        }
+    }
+
+    std::filesystem::path home;
+    const char* dataHome = std::getenv("XDG_DATA_HOME");
+    const char* userHome = std::getenv("HOME");
+    if (dataHome != nullptr && std::filesystem::path(dataHome).is_absolute()) {
+        home = dataHome;
+    } else if (userHome != nullptr && userHome[0] != '\0') {
+        home = std::filesystem::path(userHome) / ".local" / "share";
+    } else {
+        return;
+    }
+    home /= "lighthouse";
+
+    std::filesystem::create_directories(home, ec);
+    if (!ec) {
+        setenv("SHIP_HOME", home.c_str(), 0);
+    }
+}
+#endif
+
 /* Rename SDL_main to main for SDL compatibility */
 #ifdef __GNUC__
 #define SDL_main main
@@ -282,7 +459,11 @@ void push_frame() {
 
 int SDL_main(int argc, char* argv[]) {
 #ifdef _WIN32
+    setlocale(LC_ALL, ".UTF8");
     timeBeginPeriod(1);
+#endif
+#ifdef __linux__
+    SetAppImageHome();
 #endif
 
 #ifdef __APPLE__
@@ -313,17 +494,32 @@ int SDL_main(int argc, char* argv[]) {
         }
     }
 
+    for (int i = 1; i < argc; i++) {
+        for (const auto& [flag, make] : FrameHosts()) {
+            if (sHost == nullptr && flag == argv[i]) {
+                sHost = make();
+            }
+        }
+    }
+
     GameEngine::Create(argc, argv);
     // Both threads are created during core1_init, so allowlist them first.
     OS_EnableThreadEntry((void*)viMgr_entry);
     EnableThread5();
     core1_init();
+    if (sHost != nullptr) {
+        sHost->Ready();
+    }
     ThreadWatchdog_Start();
 
     sGameThread = std::thread([] {
         tIsGameThread = true;
         while (WindowIsRunning()) {
             ThreadWatchdog_Beat(WATCHDOG_GAME_TICK);
+            if (sHost != nullptr && sHost->WantsFrame() && func_8023E000() == 0) {
+                ParkGame();
+                continue;
+            }
             push_frame();
         }
         sGameThreadDone.store(true);
@@ -341,6 +537,13 @@ int SDL_main(int argc, char* argv[]) {
             continue;
         }
         DrainRenderService();
+        if (sHost != nullptr) {
+            sHost->Poll();
+            if (sParked.load() && sHost->WantsFrame() && OS_SpPeekPendingTask() == nullptr && !sReleaseDeferred) {
+                sHost->Frame();
+                continue;
+            }
+        }
         if (!ServiceRcp()) {
             // The gui only draws inside serviced frames, so a stalled game
             // thread would freeze ImGui with it. Render gui-only frames during
@@ -367,6 +570,7 @@ int SDL_main(int argc, char* argv[]) {
     if (sGameThread.joinable()) {
         sGameThread.join();
     }
+    DrainGameTasks();
     // Before Destroy: these threads draw and play audio through the engine.
     OS_JoinDecompThreads();
     ThreadWatchdog_Stop();
@@ -380,6 +584,7 @@ int SDL_main(int argc, char* argv[]) {
     timeEndPeriod(1);
 #endif
     GameEngine::Instance->Destroy();
+    sHost.reset();
     GameEngine::RelaunchIfRequested(argc, argv);
     return 0;
 }

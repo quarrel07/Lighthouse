@@ -24,6 +24,7 @@ void bsjig_setJiggyMarkerPtr(ActorMarker * jiggyMarkerPtr){
 void bsjig_jiggy_init(void){
     AnimCtrl *aCtrl = baanim_getAnimCtrlPtr();
     int tmp;
+    s32 lastJiggyCount = 9;
 
     anctrl_reset(aCtrl);
     anctrl_setSmoothTransition(aCtrl, false);
@@ -34,9 +35,12 @@ void bsjig_jiggy_init(void){
     yaw_setIdeal(func_8029B41C()); //face camera
     code_14420_setUpdateTypes(1, YAW_STATE_1_DEFAULT, 3, BA_PHYSICS_NORMAL);
     baphysics_set_target_horizontal_velocity(0.0f);
-    core1_ce60_incOrDecCounter(false);
+    midichannel_incOrDecCounter(false);
     func_8025A2FC(0,0xfa0);
-    tmp = (item_getCount(ITEM_E_JIGGY) == 9); 
+    // [port] Romhack gate: hacks with fewer jiggies a level play the last-jiggy fanfare sooner.
+    EventSystem_Should(VB_LAST_JIGGY_COUNT, true, &lastJiggyCount);
+//  tmp = (item_getCount(ITEM_E_JIGGY) == 9);
+    tmp = EventSystem_Should(VB_LAST_JIGGY_FANFARE, item_getCount(ITEM_E_JIGGY) == lastJiggyCount, bsjig_gJiggyMarker);
     if(tmp == 0) //weird if...
         tmp = 0;
     D_8037D4B1 =  tmp;
@@ -108,7 +112,7 @@ void bsjig_jiggy_end(void){
 
     if(bs_getNextState() != BS_34_JIG_NOTEDOOR){
         func_8025A2FC(-1, 0xfa0);
-        core1_ce60_incOrDecCounter(true);
+        midichannel_incOrDecCounter(true);
     }
     baMarker_collisionOn();
     if( jiggyscore_total() == 100 
@@ -150,7 +154,7 @@ void bsjig_jiggy_interrupt(void){
 void bsjig_notedoor_end(void){
     baMarker_collisionOn();
     func_8025A2FC(-1, 0xfa0);
-    core1_ce60_incOrDecCounter(true);
+    midichannel_incOrDecCounter(true);
     modelAppendages_setKazooiesUpperHalfVisibility(false);
     func_80291548();
     if( D_8037D4B2 
@@ -176,7 +180,7 @@ void bsjig_notedoor_init(void){
     code_14420_setUpdateTypes(1, YAW_STATE_1_DEFAULT, 3, BA_PHYSICS_NORMAL);
     baphysics_set_target_horizontal_velocity(0.0f);
     if(bs_getPrevState() != BS_44_JIG_JIGGY){
-        core1_ce60_incOrDecCounter(false);
+        midichannel_incOrDecCounter(false);
         func_8025A2FC(0,0xfa0);
     }
     coMusicPlayer_playMusic(COMUSIC_42_NOTEDOOR_OPENING_FANFARE,-1);

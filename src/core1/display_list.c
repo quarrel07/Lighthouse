@@ -1,5 +1,6 @@
 // BanjoDecomp: code_15B30.c
 #include "core1/core1.h"
+#include "core2/core2.h"
 #include <ultra64.h>
 #include "functions.h"
 #include "port/ShipUtils.h" // BK_LOG_*, port_shapeControllerInput
@@ -38,6 +39,11 @@ void core1_15B30_requestLockForTaskDataID(void) {
 
 void core1_15B30_requestReleaseForTaskDataID(void) {
     osSendMesgPtr(&sTaskDataListLockMesgQueue, NULL, OS_MESG_BLOCK);
+}
+
+// [port] Watchdog diagnostics and blocking opt-in
+OSMesgQueue *core1_15B30_getTaskDataListLockQueue(void) {
+    return &sTaskDataListLockMesgQueue;
 }
 
 void core1_15B30_addAudioTaskData(Acmd *arg0, Acmd *arg1, OSMesgQueue *arg2, OSMesg arg3) {
@@ -180,7 +186,7 @@ void func_80253FE8(void){
 }
 
 void core1_15B30_sendMesg3ToRenderThread(void) {
-    thread5_sendTaskToQueue(OS_MESG_32(THREAD5_MESSAGE_EVENT_SYNC));
+    thread5_sendTaskToQueue(OS_MESG_PTR((void*)(uintptr_t)THREAD5_MESSAGE_EVENT_SYNC));
 }
 
 void core1_15B30_init(void) {
@@ -215,12 +221,12 @@ void graphicsCache_release(void) {
 void graphicsCache_init(void) {
     if (sGfxStack[0] == NULL) {
 #if 0
-        sGfxStack[0] = (Gfx *)malloc(29600); // 3700 dlist commands
-        sGfxStack[1] = (Gfx *)malloc(29600);
-        sMtxStack[0] = (Mtx *)malloc(44800); // 700 matrices
-        sMtxStack[1] = (Mtx *)malloc(44800);
-        sVtxStack[0] = (Vtx *)malloc(6880); // 430 vertices
-        sVtxStack[1] = (Vtx *)malloc(6880);
+        sGfxStack[0] = (Gfx *)bk_malloc(29600); // 3700 dlist commands
+        sGfxStack[1] = (Gfx *)bk_malloc(29600);
+        sMtxStack[0] = (Mtx *)bk_malloc(44800); // 700 matrices
+        sMtxStack[1] = (Mtx *)bk_malloc(44800);
+        sVtxStack[0] = (Vtx *)bk_malloc(6880); // 430 vertices
+        sVtxStack[1] = (Vtx *)bk_malloc(6880);
 #endif
         sGfxStack[0] = (Gfx *)GameEngine_Malloc(GFX_STACK_COUNT * sizeof(Gfx));
         sGfxStack[1] = (Gfx *)GameEngine_Malloc(GFX_STACK_COUNT * sizeof(Gfx));
